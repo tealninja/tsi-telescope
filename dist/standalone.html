@@ -2078,6 +2078,164 @@ function seedSampleProjects() {
 }
 
 
+/* ===== src/compute/demand.js ===== */
+/* ============================================================
+   Resource demand computation.
+
+   Given the portfolio in state, integrates ramp-up / peak /
+   ramp-down loading curves per role per phase, scaled by each
+   project's location multiplier, into FTE values per role per
+   month across the 36-month rolling horizon.
+
+   Midpoint convention on ramps: a 1-month ramp at 100% peak
+   yields 50% of peak in that month.
+   ============================================================ */
+
+
+
+function computeLoadCurve(N, peak, rampUp, rampDown) {
+  if (N <= 0 || peak <= 0) return new Array(Math.max(0,N)).fill(0);
+  let R = Math.max(0, Math.min(rampUp, N));
+  let D = Math.max(0, Math.min(rampDown, N - R));
+  if (R + D > N) { const s = N/(R+D); R = Math.floor(R*s); D = N - R; }
+  const flat = N - R - D;
+  const out = [];
+  for (let i = 0; i < R; i++) {
+    const t = (i + 0.5) / R;
+    out.push(peak * t);
+  }
+  for (let i = 0; i < flat; i++) out.push(peak);
+  for (let i = 0; i < D; i++) {
+    const t = 1 - (i + 0.5) / D;
+    out.push(peak * t);
+  }
+  return out;
+}
+
+/* Effective per-phase durations after the location multiplier is applied.
+   We round to nearest integer month, with a minimum of 1 month for any
+   non-zero phase. */
+function effectivePhaseDurations(project) {
+  const loc = getLocation(project.locationId);
+  const mult = loc ? loc.multiplier : 1.0;
+  return project.phases.map(ph => {
+    if (ph.duration <= 0) return 0;
+    const scaled = ph.duration * mult;
+    return Math.max(1, Math.round(scaled));
+  });
+}
+
+/* Nearest-neighbor resampler used when a detailed FTE array is held in
+   BASE-month units but needs to be applied over EFFECTIVE-month units
+   (location multiplier ≠ 1). Step values are preserved exactly rather
+   than smoothed — user-entered per-month allocations are piecewise
+   stepwise data, not a continuous signal. */
+function resampleArray(arr, newLen) {
+  const N1 = arr.length;
+  if (N1 === newLen) return arr.slice();
+  if (newLen <= 0) return [];
+  if (N1 === 0) return new Array(newLen).fill(0);
+  const out = new Array(newLen);
+  for (let i = 0; i < newLen; i++) {
+    const idx = Math.min(N1 - 1, Math.floor(i * N1 / newLen));
+    out[i] = arr[idx];
+  }
+  return out;
+}
+
+/* Total BASE-month duration (sum of phase.duration before location scaling).
+   Used as the length of detailedLoading arrays. */
+function totalBaseDuration(target) {
+  return target.phases.reduce((a, ph) => a + (ph.duration || 0), 0);
+}
+
+function computeAllDemand() {
+  const demand = {};
+  for (const r of state.roles) demand[r.id] = new Array(36).fill(0);
+  const projectDemand = {};
+
+  for (const proj of state.projects) {
+    projectDemand[proj.id] = {};
+    for (const r of state.roles) projectDemand[proj.id][r.id] = new Array(36).fill(0);
+
+    const effDurs = effectivePhaseDurations(proj);
+    const effTotal = effDurs.reduce((a,b) => a + b, 0);
+    if (effTotal <= 0) continue;
+    if (!proj.detailedLoading) continue;
+
+    // Per-role: take the base-month array, resample (nearest-neighbor)
+    // onto the effective duration, then write into the demand grid.
+    const startIdx = monthsBetween(state.startMonth, proj.startMonth);
+    for (const r of state.roles) {
+      const baseArr = proj.detailedLoading[r.id];
+      if (!Array.isArray(baseArr) || baseArr.length === 0) continue;
+      const arr = resampleArray(baseArr, effTotal);
+      for (let k = 0; k < arr.length; k++) {
+        const mIdx = startIdx + k;
+        if (mIdx >= 0 && mIdx < 36) {
+          demand[r.id][mIdx] += arr[k];
+          projectDemand[proj.id][r.id][mIdx] += arr[k];
+        }
+      }
+    }
+  }
+
+  return { demand, projectDemand };
+}
+
+/* One-time migration: ensure every project and template has a
+   detailedLoading array. For data that still carries legacy
+   per-phase peak/rampUp/rampDown values, generate the array from
+   those curves. Legacy values are left in place but unused. */
+function migrateAllToDetailed() {
+  for (const t of (state.templates || [])) {
+    if (!t.detailedLoading || Object.keys(t.detailedLoading).length === 0) {
+      t.detailedLoading = detailedFromSimple(t);
+    }
+  }
+  for (const p of (state.projects || [])) {
+    if (!p.detailedLoading || Object.keys(p.detailedLoading).length === 0) {
+      p.detailedLoading = detailedFromSimple(p);
+    }
+  }
+}
+
+/* Build a base-month FTE array per role from a target's phase-based
+   simple curves. Used to seed the detailed-mode editor when the user
+   first switches a project or template from simple to detailed. */
+function detailedFromSimple(target) {
+  const out = {};
+  for (const r of state.roles) {
+    out[r.id] = [];
+    for (const ph of target.phases) {
+      const ld = ph.loading[r.id] || defaultLoading(0,0,0);
+      const N = ph.duration || 0;
+      const curve = computeLoadCurve(N, ld.peak, ld.rampUp, ld.rampDown);
+      // curve is in percent of an FTE; the demand grid divides by 100.
+      // For the editor (FTE units), pre-divide.
+      for (const v of curve) out[r.id].push(v / 100);
+    }
+  }
+  return out;
+}
+
+function totalEffectiveDuration(p) {
+  return effectivePhaseDurations(p).reduce((a,b)=>a+b,0);
+}
+
+/* Project sort order for stacked charts: longest projects at the bottom
+   (largest area first) so shorter studies sit on top where they remain
+   visible. Stable name tiebreak. */
+function projectStackOrder() {
+  return [...state.projects].sort((a,b) => {
+    const da = totalEffectiveDuration(a);
+    const db = totalEffectiveDuration(b);
+    if (da !== db) return db - da;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+
 /* ===== src/util/format.js ===== */
 /* ============================================================
    Formatting helpers — pure functions, no state dependencies.
@@ -2343,171 +2501,6 @@ function renderCapacity() {
 }
 
 
-/* ===== src/compute/demand.js ===== */
-/* ============================================================
-   Resource demand computation.
-
-   Given the portfolio in state, integrates ramp-up / peak /
-   ramp-down loading curves per role per phase, scaled by each
-   project's location multiplier, into FTE values per role per
-   month across the 36-month rolling horizon.
-
-   Midpoint convention on ramps: a 1-month ramp at 100% peak
-   yields 50% of peak in that month.
-   ============================================================ */
-
-
-
-function computeLoadCurve(N, peak, rampUp, rampDown) {
-  if (N <= 0 || peak <= 0) return new Array(Math.max(0,N)).fill(0);
-  let R = Math.max(0, Math.min(rampUp, N));
-  let D = Math.max(0, Math.min(rampDown, N - R));
-  if (R + D > N) { const s = N/(R+D); R = Math.floor(R*s); D = N - R; }
-  const flat = N - R - D;
-  const out = [];
-  for (let i = 0; i < R; i++) {
-    const t = (i + 0.5) / R;
-    out.push(peak * t);
-  }
-  for (let i = 0; i < flat; i++) out.push(peak);
-  for (let i = 0; i < D; i++) {
-    const t = 1 - (i + 0.5) / D;
-    out.push(peak * t);
-  }
-  return out;
-}
-
-/* Effective per-phase durations after the location multiplier is applied.
-   We round to nearest integer month, with a minimum of 1 month for any
-   non-zero phase. */
-function effectivePhaseDurations(project) {
-  const loc = getLocation(project.locationId);
-  const mult = loc ? loc.multiplier : 1.0;
-  return project.phases.map(ph => {
-    if (ph.duration <= 0) return 0;
-    const scaled = ph.duration * mult;
-    return Math.max(1, Math.round(scaled));
-  });
-}
-
-/* Nearest-neighbor resampler used when a detailed FTE array is held in
-   BASE-month units but needs to be applied over EFFECTIVE-month units
-   (location multiplier ≠ 1). Step values are preserved exactly rather
-   than smoothed — user-entered per-month allocations are piecewise
-   stepwise data, not a continuous signal. */
-function resampleArray(arr, newLen) {
-  const N1 = arr.length;
-  if (N1 === newLen) return arr.slice();
-  if (newLen <= 0) return [];
-  if (N1 === 0) return new Array(newLen).fill(0);
-  const out = new Array(newLen);
-  for (let i = 0; i < newLen; i++) {
-    const idx = Math.min(N1 - 1, Math.floor(i * N1 / newLen));
-    out[i] = arr[idx];
-  }
-  return out;
-}
-
-/* Total BASE-month duration (sum of phase.duration before location scaling).
-   Used as the length of detailedLoading arrays. */
-function totalBaseDuration(target) {
-  return target.phases.reduce((a, ph) => a + (ph.duration || 0), 0);
-}
-
-function computeAllDemand() {
-  const demand = {};
-  for (const r of state.roles) demand[r.id] = new Array(36).fill(0);
-  const projectDemand = {};
-
-  for (const proj of state.projects) {
-    projectDemand[proj.id] = {};
-    for (const r of state.roles) projectDemand[proj.id][r.id] = new Array(36).fill(0);
-
-    const effDurs = effectivePhaseDurations(proj);
-    const effTotal = effDurs.reduce((a,b) => a + b, 0);
-    const useDetailed = proj.loadingMode === 'detailed' && proj.detailedLoading;
-
-    if (useDetailed && effTotal > 0) {
-      // Detailed path: each role's BASE-length array is resampled onto
-      // EFFECTIVE-length, then applied directly to the demand grid.
-      const startIdx = monthsBetween(state.startMonth, proj.startMonth);
-      for (const r of state.roles) {
-        const baseArr = proj.detailedLoading[r.id];
-        if (!Array.isArray(baseArr) || baseArr.length === 0) continue;
-        const arr = resampleArray(baseArr, effTotal);
-        for (let k = 0; k < arr.length; k++) {
-          const mIdx = startIdx + k;
-          if (mIdx >= 0 && mIdx < 36) {
-            demand[r.id][mIdx] += arr[k];
-            projectDemand[proj.id][r.id][mIdx] += arr[k];
-          }
-        }
-      }
-    } else {
-      // Simple path: peak / rampUp / rampDown per phase per role.
-      let cursor = proj.startMonth;
-      proj.phases.forEach((ph, phIdx) => {
-        const N = effDurs[phIdx];
-        for (const r of state.roles) {
-          const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-          const origDur = ph.duration || 1;
-          const rampUpScaled = N > 0 ? Math.round(ld.rampUp * (N / origDur)) : 0;
-          const rampDownScaled = N > 0 ? Math.round(ld.rampDown * (N / origDur)) : 0;
-          const curve = computeLoadCurve(N, ld.peak, rampUpScaled, rampDownScaled);
-          for (let k = 0; k < N; k++) {
-            const mKey = addMonths(cursor, k);
-            const mIdx = monthsBetween(state.startMonth, mKey);
-            if (mIdx >= 0 && mIdx < 36) {
-              const fte = curve[k] / 100;
-              demand[r.id][mIdx] += fte;
-              projectDemand[proj.id][r.id][mIdx] += fte;
-            }
-          }
-        }
-        cursor = addMonths(cursor, N);
-      });
-    }
-  }
-
-  return { demand, projectDemand };
-}
-
-/* Build a base-month FTE array per role from a target's phase-based
-   simple curves. Used to seed the detailed-mode editor when the user
-   first switches a project or template from simple to detailed. */
-function detailedFromSimple(target) {
-  const out = {};
-  for (const r of state.roles) {
-    out[r.id] = [];
-    for (const ph of target.phases) {
-      const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-      const N = ph.duration || 0;
-      const curve = computeLoadCurve(N, ld.peak, ld.rampUp, ld.rampDown);
-      // curve is in percent of an FTE; the demand grid divides by 100.
-      // For the editor (FTE units), pre-divide.
-      for (const v of curve) out[r.id].push(v / 100);
-    }
-  }
-  return out;
-}
-
-function totalEffectiveDuration(p) {
-  return effectivePhaseDurations(p).reduce((a,b)=>a+b,0);
-}
-
-/* Project sort order for stacked charts: longest projects at the bottom
-   (largest area first) so shorter studies sit on top where they remain
-   visible. Stable name tiebreak. */
-function projectStackOrder() {
-  return [...state.projects].sort((a,b) => {
-    const da = totalEffectiveDuration(a);
-    const db = totalEffectiveDuration(b);
-    if (da !== db) return db - da;
-    return a.name.localeCompare(b.name);
-  });
-}
-
-
 /* ===== src/ui/detailed-schedule.js ===== */
 /* ============================================================
    Detailed monthly schedule editor — shared between the project
@@ -2677,30 +2670,44 @@ function wireDetailedSchedule(target, prefix, onChange) {
   });
 }
 
-/* When phase durations change while in detailed mode, resize each role's
-   array to match the new total. The caller decides whether to call this
-   directly or to first ask the user. Strategy: per-phase block resize via
-   nearest-neighbor resampling. Preserves the SHAPE of each phase's curve. */
-function resizeDetailedToPhases(target, oldPhaseDurs) {
-  if (!target.detailedLoading) return;
-  const newDurs = target.phases.map(p => p.duration || 0);
-  const oldTotal = oldPhaseDurs.reduce((a,b)=>a+b, 0);
-  const newTotal = newDurs.reduce((a,b)=>a+b, 0);
-  if (oldTotal === newTotal) return;  // no resize needed at the total level
+/* Snapshot the current phase layout BEFORE a mutation (add, delete,
+   reorder, duration change). The snapshot records each phase's
+   reference + its duration at that moment, so the rebuild can locate
+   each old phase's block in the array even after the mutation. */
+function snapshotPhases(target) {
+  return target.phases.map(ph => ({ ref: ph, dur: ph.duration || 0 }));
+}
 
+/* Rebuild detailedLoading after a phase mutation. Walks the NEW phase
+   list and, for each phase, looks up its old position (by reference)
+   in the snapshot to find the corresponding block. New phases (not in
+   the snapshot) fill with zeros; deleted phases are naturally dropped.
+   Per-phase duration changes are handled by resampling the old block. */
+function rebuildDetailedAfterPhaseChange(target, snap) {
+  if (!target.detailedLoading) {
+    ensureDetailedLoading(target);
+    return;
+  }
+  // Build phase-ref → { start, dur } from the snapshot.
+  const oldLayout = new Map();
+  let cursor = 0;
+  for (const s of snap) {
+    oldLayout.set(s.ref, { start: cursor, dur: s.dur });
+    cursor += s.dur;
+  }
   for (const r of state.roles) {
-    const oldArr = target.detailedLoading[r.id] || new Array(oldTotal).fill(0);
+    const oldArr = target.detailedLoading[r.id] || [];
     const newArr = [];
-    // Walk the OLD array per-phase and resample each block to the new
-    // block size. Assumes phases haven't been reordered (just resized).
-    let oldCursor = 0;
-    for (let i = 0; i < newDurs.length; i++) {
-      const oldDur = oldPhaseDurs[i] || 0;
-      const newDur = newDurs[i] || 0;
-      const block = oldArr.slice(oldCursor, oldCursor + oldDur);
-      const resized = resampleArray(block, newDur);
-      for (const v of resized) newArr.push(v);
-      oldCursor += oldDur;
+    for (const newPh of target.phases) {
+      const newDur = newPh.duration || 0;
+      const old = oldLayout.get(newPh);
+      if (!old) {
+        for (let k = 0; k < newDur; k++) newArr.push(0);
+      } else {
+        const block = oldArr.slice(old.start, old.start + old.dur);
+        const resized = resampleArray(block, newDur);
+        for (const v of resized) newArr.push(v);
+      }
     }
     target.detailedLoading[r.id] = newArr;
   }
@@ -2795,7 +2802,8 @@ function openProjectModal(projectId) {
       templateId: tpl.id,
       startMonth: monthKey(new Date()),
       notes: '',
-      phases: deepCopy(tpl.phases)
+      phases: deepCopy(tpl.phases),
+      detailedLoading: tpl.detailedLoading ? deepCopy(tpl.detailedLoading) : {}
     };
   } else {
     p = deepCopy(getProject(projectId));
@@ -2844,41 +2852,20 @@ function buildProjectForm(p) {
   let phasesHTML = '<table class="phase-table"><thead><tr>' +
     '<th style="width:30px">#</th>' +
     '<th>Phase</th>' +
-    '<th style="width:95px">Base Dur (mo)</th>' +
-    '<th style="width:95px">Effective (mo)</th>' +
-    '<th>Role Loading (Peak% / Ramp Up / Ramp Down)</th>' +
+    '<th style="width:120px">Base Dur (months)</th>' +
+    '<th style="width:120px">Effective (months)</th>' +
     '</tr></thead><tbody>';
   p.phases.forEach((ph, idx) => {
     const phMeta = getPhase(ph.phaseId);
     const effDur = ph.duration > 0 ? Math.max(1, Math.round(ph.duration * mult)) : 0;
     phasesHTML += `
       <tr data-phase-idx="${idx}">
-        <td>${idx+1}</td>
+        <td class="mono">${idx+1}</td>
         <td class="phase-name">
           <span class="phase-color-dot" style="background:${phMeta?phMeta.color:'#999'}"></span>${escapeHtml(phMeta?phMeta.name:ph.phaseId)}
         </td>
         <td><input type="number" min="0" step="1" class="ph-duration" value="${ph.duration}"></td>
         <td><span class="eff-dur mono" style="color:var(--teal);font-weight:600">${effDur}</span></td>
-        <td>
-          <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
-            <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
-            <div class="role-load-grid">
-              <div class="head">Role</div>
-              <div class="head">Peak %</div>
-              <div class="head">Ramp Up (mo)</div>
-              <div class="head">Ramp Down (mo)</div>
-              ${state.roles.map(r => {
-                const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-                return `
-                  <div>${escapeHtml(r.name)}</div>
-                  <div><input type="number" min="0" step="1" class="rl" data-role="${r.id}" data-field="peak" value="${ld.peak}"></div>
-                  <div><input type="number" min="0" step="1" class="rl" data-role="${r.id}" data-field="rampUp" value="${ld.rampUp}"></div>
-                  <div><input type="number" min="0" step="1" class="rl" data-role="${r.id}" data-field="rampDown" value="${ld.rampDown}"></div>
-                `;
-              }).join('')}
-            </div>
-          </details>
-        </td>
       </tr>
     `;
   });
@@ -2934,15 +2921,11 @@ function buildProjectForm(p) {
     <div class="section-label" style="margin-top:20px">Commercial · Contract &amp; Billing</div>
     ${buildBillingSection(p)}
 
-    <div class="section-label" style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
-      <span>Phases · Role Loading</span>
-      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
-        <button type="button" class="btn ghost small pf-mode-btn${(p.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
-        <button type="button" class="btn ghost small pf-mode-btn${p.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
-      </div>
-    </div>
+    <div class="section-label" style="margin-top:20px">Phases · Duration</div>
     <div id="pf-phases">${phasesHTML}</div>
-    <div id="pf-detailed">${(p.loadingMode==='detailed') ? buildDetailedScheduleSection(p, 'pf') : ''}</div>
+
+    <div class="section-label" style="margin-top:20px">Resource Allocation · FTE per Role per Month</div>
+    <div id="pf-detailed">${buildDetailedScheduleSection(p, 'pf')}</div>
   `;
 }
 
@@ -3091,10 +3074,6 @@ function renderMilestoneRow(m, i, anchorOpts, cv) {
   `;
 }
 
-function countActiveRoles(loading) {
-  return Object.values(loading).filter(l => l.peak > 0).length;
-}
-
 function wireProjectForm(p) {
   const tplSel = $('#pf-template');
   tplSel.addEventListener('change', () => {
@@ -3104,6 +3083,7 @@ function wireProjectForm(p) {
     p.templateId = tplSel.value;
     const tpl = getTemplate(p.templateId);
     p.phases = deepCopy(tpl.phases);
+    p.detailedLoading = tpl.detailedLoading ? deepCopy(tpl.detailedLoading) : {};
     if (tpl.defaultContractValue != null) p.contractValue = tpl.defaultContractValue;
     if (tpl.billingMode) p.billingMode = tpl.billingMode;
     if (tpl.milestones) p.milestones = deepCopyMilestones(tpl.milestones);
@@ -3135,39 +3115,7 @@ function wireProjectForm(p) {
   wireProjectFormPhases(p);
   wireBillingForm(p);
   wireWinProbForm(p);
-  wireScheduleModeToggle(p);
-  if ((p.loadingMode || 'simple') === 'detailed') {
-    wireDetailedSchedule(p, 'pf');
-  }
-}
-
-function wireScheduleModeToggle(p) {
-  $('#modal-project-body').querySelectorAll('.pf-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const newMode = btn.dataset.mode;
-      const curMode = p.loadingMode || 'simple';
-      if (newMode === curMode) return;
-      if (newMode === 'detailed') {
-        // Seed the detailed array from current phase curves if empty
-        if (!p.detailedLoading || Object.keys(p.detailedLoading).length === 0) {
-          p.detailedLoading = detailedFromSimple(p);
-        }
-        p.loadingMode = 'detailed';
-      } else {
-        // Switching back to simple — confirm before discarding
-        const hasData = p.detailedLoading && Object.values(p.detailedLoading)
-          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
-        if (hasData && !confirm('Switch back to simple curves? The detailed per-month allocation will be kept on the side but ignored at compute time. Switching back to Detailed later restores it.')) {
-          return;
-        }
-        p.loadingMode = 'simple';
-      }
-      // Re-render the modal body to reflect mode
-      const body = $('#modal-project-body');
-      body.innerHTML = buildProjectForm(p);
-      wireProjectForm(p);
-    });
-  });
+  wireDetailedSchedule(p, 'pf');
 }
 
 function wireWinProbForm(p) {
@@ -3364,24 +3312,35 @@ function refreshMilestoneSum(p) {
 }
 
 function wireProjectFormPhases(p) {
+  // On `change` (not `input`) so the user finishes typing before we
+  // resize the detailed grid — otherwise every keystroke would rebuild.
   $$('#pf-phases .ph-duration').forEach(inp => {
     inp.addEventListener('input', () => {
+      // Live effective-duration display feedback only; no rebuild.
       const v = Math.max(0, parseInt(inp.value || '0', 10));
       const tr = inp.closest('tr');
       const phaseIdx = parseInt(tr.dataset.phaseIdx, 10);
       p.phases[phaseIdx].duration = v;
       updateEffDurs(p);
     });
-  });
-  $$('#pf-phases .rl').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const phaseIdx = parseInt(tr.dataset.phaseIdx, 10);
-      const roleId = inp.dataset.role;
-      const field = inp.dataset.field;
-      const v = Math.max(0, parseFloat(inp.value || '0'));
-      if (!p.phases[phaseIdx].loading[roleId]) p.phases[phaseIdx].loading[roleId] = defaultLoading(0,0,0);
-      p.phases[phaseIdx].loading[roleId][field] = v;
+    inp.addEventListener('change', () => {
+      // Commit: snapshot the OLD layout (with old durations now lost), so we
+      // rebuild using the snapshot captured on focus. We use the focus
+      // snapshot rather than recomputing.
+      const snap = inp._phaseSnap || snapshotPhases(p);
+      delete inp._phaseSnap;
+      rebuildDetailedAfterPhaseChange(p, snap);
+      // Re-render the detailed grid in place.
+      const wrap = $('#pf-detailed');
+      if (wrap) {
+        wrap.innerHTML = buildDetailedScheduleSection(p, 'pf');
+        wireDetailedSchedule(p, 'pf');
+      }
+    });
+    inp.addEventListener('focus', () => {
+      // Capture the layout BEFORE the user starts editing, so the change
+      // handler has access to the old durations.
+      inp._phaseSnap = snapshotPhases(p);
     });
   });
 }
@@ -3566,7 +3525,6 @@ function renderKPIs() {
 
 
 
-
 function renderTemplates() {
   const list = $('#template-list');
   list.innerHTML = state.templates.map(t => {
@@ -3692,9 +3650,8 @@ function renderTemplateModalBody(t) {
   let phasesHTML = '<table class="phase-table"><thead><tr>' +
     '<th style="width:30px">#</th>' +
     '<th>Phase</th>' +
-    '<th style="width:90px">Duration (mo)</th>' +
-    '<th>Role Loading</th>' +
-    '<th style="width:80px"></th>' +
+    '<th style="width:110px">Duration (months)</th>' +
+    '<th style="width:100px"></th>' +
     '</tr></thead><tbody id="tpl-phases-body">';
   t.phases.forEach((ph, idx) => {
     phasesHTML += renderTemplatePhaseRow(t, ph, idx);
@@ -3707,13 +3664,7 @@ function renderTemplateModalBody(t) {
     </div>
     <div class="field"><label>Description</label><textarea id="tf-description" rows="2">${escapeHtml(t.description||'')}</textarea></div>
 
-    <div class="section-label" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
-      <span>Phases · Default Role Loading</span>
-      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
-        <button type="button" class="btn ghost small tf-mode-btn${(t.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
-        <button type="button" class="btn ghost small tf-mode-btn${t.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
-      </div>
-    </div>
+    <div class="section-label" style="margin-top:18px">Phases · Duration</div>
     ${phasesHTML}
 
     <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
@@ -3722,31 +3673,12 @@ function renderTemplateModalBody(t) {
       <button class="btn ghost small" id="tf-add-phase">+ Add Phase</button>
     </div>
 
-    <div id="tf-detailed">${t.loadingMode === 'detailed' ? buildDetailedScheduleSection(t, 'tf') : ''}</div>
+    <div class="section-label" style="margin-top:20px">Default Resource Allocation · FTE per Role per Month</div>
+    <div id="tf-detailed">${buildDetailedScheduleSection(t, 'tf')}</div>
   `;
 
   wireTemplateModal(t);
-  if (t.loadingMode === 'detailed') wireDetailedSchedule(t, 'tf');
-  body.querySelectorAll('.tf-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const newMode = btn.dataset.mode;
-      const curMode = t.loadingMode || 'simple';
-      if (newMode === curMode) return;
-      if (newMode === 'detailed') {
-        if (!t.detailedLoading || Object.keys(t.detailedLoading).length === 0) {
-          t.detailedLoading = detailedFromSimple(t);
-        }
-        t.loadingMode = 'detailed';
-      } else {
-        const hasData = t.detailedLoading && Object.values(t.detailedLoading)
-          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
-        if (hasData && !confirm('Switch back to simple curves? The detailed allocation is kept in the template but ignored at compute time.')) return;
-        t.loadingMode = 'simple';
-      }
-      // Re-render the body from the in-memory `t` so detailed edits survive.
-      renderTemplateModalBody(t);
-    });
-  });
+  wireDetailedSchedule(t, 'tf');
 
   $('#modal-template-save').onclick = () => {
     t.name = $('#tf-name').value;
@@ -3769,26 +3701,6 @@ function renderTemplatePhaseRow(t, ph, idx) {
         <span class="phase-color-dot" style="background:${phMeta?phMeta.color:'#999'}"></span>${escapeHtml(phMeta?phMeta.name:ph.phaseId)}
       </td>
       <td><input type="number" min="0" step="1" class="t-duration" value="${ph.duration}"></td>
-      <td>
-        <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
-          <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
-          <div class="role-load-grid">
-            <div class="head">Role</div>
-            <div class="head">Peak %</div>
-            <div class="head">Ramp Up (mo)</div>
-            <div class="head">Ramp Down (mo)</div>
-            ${state.roles.map(r => {
-              const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-              return `
-                <div>${escapeHtml(r.name)}</div>
-                <div><input type="number" min="0" step="1" class="t-rl" data-role="${r.id}" data-field="peak" value="${ld.peak}"></div>
-                <div><input type="number" min="0" step="1" class="t-rl" data-role="${r.id}" data-field="rampUp" value="${ld.rampUp}"></div>
-                <div><input type="number" min="0" step="1" class="t-rl" data-role="${r.id}" data-field="rampDown" value="${ld.rampDown}"></div>
-              `;
-            }).join('')}
-          </div>
-        </details>
-      </td>
       <td style="text-align:center;display:flex;gap:2px;justify-content:center;padding:4px">
         <button class="btn ghost small t-up" data-idx="${idx}" title="Move up">↑</button>
         <button class="btn ghost small t-down" data-idx="${idx}" title="Move down">↓</button>
@@ -3798,111 +3710,85 @@ function renderTemplatePhaseRow(t, ph, idx) {
   `;
 }
 
-function wireTemplateModal(t) {
-  const body = $('#modal-template-body');
+/* Apply a phase mutation while preserving the detailed monthly grid:
+   snapshot the current phase layout, run the mutator, rebuild the
+   detailed array from the snapshot, then re-render the phase table +
+   detailed grid. */
+function withPhaseMutation(t, mutator) {
+  const snap = snapshotPhases(t);
+  mutator();
+  rebuildDetailedAfterPhaseChange(t, snap);
+  rebuildTemplatePhasesAndGrid(t);
+}
 
-  body.querySelectorAll('.t-duration').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const idx = parseInt(tr.dataset.phaseIdx, 10);
-      t.phases[idx].duration = Math.max(0, parseInt(inp.value || '0', 10));
-    });
-  });
-  body.querySelectorAll('.t-rl').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const idx = parseInt(tr.dataset.phaseIdx, 10);
-      const roleId = inp.dataset.role;
-      const field = inp.dataset.field;
-      const v = Math.max(0, parseFloat(inp.value || '0'));
-      if (!t.phases[idx].loading[roleId]) t.phases[idx].loading[roleId] = defaultLoading(0,0,0);
-      t.phases[idx].loading[roleId][field] = v;
-    });
-  });
-  body.querySelectorAll('.t-up').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.idx, 10);
-      if (i > 0) {
-        [t.phases[i-1], t.phases[i]] = [t.phases[i], t.phases[i-1]];
-        rebuildTemplatePhases(t);
-      }
-    });
-  });
-  body.querySelectorAll('.t-down').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.idx, 10);
-      if (i < t.phases.length - 1) {
-        [t.phases[i+1], t.phases[i]] = [t.phases[i], t.phases[i+1]];
-        rebuildTemplatePhases(t);
-      }
-    });
-  });
-  body.querySelectorAll('.t-del').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.idx, 10);
-      if (!confirm(`Remove phase ${i+1}?`)) return;
-      t.phases.splice(i, 1);
-      rebuildTemplatePhases(t);
-    });
-  });
+function wireTemplateModal(t) {
+  bindPhaseHandlers(t);
 
   $('#tf-add-phase').addEventListener('click', () => {
     const phaseId = $('#tf-add-phase-id').value;
     const dur = Math.max(1, parseInt($('#tf-add-phase-dur').value || '1', 10));
-    t.phases.push({ phaseId, duration: dur, loading: buildLoad({}) });
-    rebuildTemplatePhases(t);
+    withPhaseMutation(t, () => {
+      t.phases.push({ phaseId, duration: dur, loading: buildLoad({}) });
+    });
   });
 }
 
-function rebuildTemplatePhases(t) {
-  const tbody = $('#tpl-phases-body');
-  tbody.innerHTML = t.phases.map((ph, idx) => renderTemplatePhaseRow(t, ph, idx)).join('');
-  // Rewire just the phase-related stuff (keep the add-phase form button wired - that one's outside)
-  // Easier to re-call wireTemplateModal but it would double-wire the add button. Instead, re-wire only phase rows.
+/* Re-bindable handlers for the phase-row inputs (duration + reorder + delete).
+   Called on initial wire AND after every phase mutation. */
+function bindPhaseHandlers(t) {
   $$('#tpl-phases-body .t-duration').forEach(inp => {
+    inp.addEventListener('focus', () => { inp._snap = snapshotPhases(t); });
     inp.addEventListener('input', () => {
       const tr = inp.closest('tr');
       const idx = parseInt(tr.dataset.phaseIdx, 10);
       t.phases[idx].duration = Math.max(0, parseInt(inp.value || '0', 10));
     });
-  });
-  $$('#tpl-phases-body .t-rl').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const idx = parseInt(tr.dataset.phaseIdx, 10);
-      const roleId = inp.dataset.role;
-      const field = inp.dataset.field;
-      const v = Math.max(0, parseFloat(inp.value || '0'));
-      if (!t.phases[idx].loading[roleId]) t.phases[idx].loading[roleId] = defaultLoading(0,0,0);
-      t.phases[idx].loading[roleId][field] = v;
+    inp.addEventListener('change', () => {
+      const snap = inp._snap || snapshotPhases(t);
+      delete inp._snap;
+      rebuildDetailedAfterPhaseChange(t, snap);
+      rebuildDetailedGrid(t);
     });
   });
   $$('#tpl-phases-body .t-up').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.dataset.idx, 10);
-      if (i > 0) {
+      if (i > 0) withPhaseMutation(t, () => {
         [t.phases[i-1], t.phases[i]] = [t.phases[i], t.phases[i-1]];
-        rebuildTemplatePhases(t);
-      }
+      });
     });
   });
   $$('#tpl-phases-body .t-down').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.dataset.idx, 10);
-      if (i < t.phases.length - 1) {
+      if (i < t.phases.length - 1) withPhaseMutation(t, () => {
         [t.phases[i+1], t.phases[i]] = [t.phases[i], t.phases[i+1]];
-        rebuildTemplatePhases(t);
-      }
+      });
     });
   });
   $$('#tpl-phases-body .t-del').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.dataset.idx, 10);
       if (!confirm(`Remove phase ${i+1}?`)) return;
-      t.phases.splice(i, 1);
-      rebuildTemplatePhases(t);
+      withPhaseMutation(t, () => {
+        t.phases.splice(i, 1);
+      });
     });
   });
+}
+
+function rebuildTemplatePhasesAndGrid(t) {
+  const tbody = $('#tpl-phases-body');
+  tbody.innerHTML = t.phases.map((ph, idx) => renderTemplatePhaseRow(t, ph, idx)).join('');
+  bindPhaseHandlers(t);
+  rebuildDetailedGrid(t);
+}
+
+function rebuildDetailedGrid(t) {
+  const wrap = $('#tf-detailed');
+  if (!wrap) return;
+  wrap.innerHTML = buildDetailedScheduleSection(t, 'tf');
+  wireDetailedSchedule(t, 'tf');
 }
 
 function closeTemplateModal() {
@@ -7208,6 +7094,7 @@ function renderLegend() {
 
 
 
+
 /* ============================================================
    UI WIRING
    ============================================================ */
@@ -7279,6 +7166,7 @@ $('#file-import').addEventListener('change', (e) => {
           if (src) { p.lat = src.lat; p.lng = src.lng; }
         }
       }
+      migrateAllToDetailed();
       saveState();
       renderAll();
       toast('Imported plan');
@@ -7303,6 +7191,7 @@ $('#btn-reset').addEventListener('click', () => {
     capacity: {}
   });
   seedSampleProjects();
+  migrateAllToDetailed();
   saveState();
   renderAll();
   toast('Reset to defaults');
@@ -7388,6 +7277,10 @@ if (!loadState()) {
     if (!state.capacity[r.id]) state.capacity[r.id] = new Array(36).fill(0);
   }
 }
+// Convert any legacy per-phase peak/rampUp/rampDown curves into the
+// detailed monthly grid so the rest of the app has a single source of truth.
+migrateAllToDetailed();
+saveState();
 renderAll();
 
 window.addEventListener('beforeunload', saveState);

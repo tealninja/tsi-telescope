@@ -170,30 +170,44 @@ export function wireDetailedSchedule(target, prefix, onChange) {
   });
 }
 
-/* When phase durations change while in detailed mode, resize each role's
-   array to match the new total. The caller decides whether to call this
-   directly or to first ask the user. Strategy: per-phase block resize via
-   nearest-neighbor resampling. Preserves the SHAPE of each phase's curve. */
-export function resizeDetailedToPhases(target, oldPhaseDurs) {
-  if (!target.detailedLoading) return;
-  const newDurs = target.phases.map(p => p.duration || 0);
-  const oldTotal = oldPhaseDurs.reduce((a,b)=>a+b, 0);
-  const newTotal = newDurs.reduce((a,b)=>a+b, 0);
-  if (oldTotal === newTotal) return;  // no resize needed at the total level
+/* Snapshot the current phase layout BEFORE a mutation (add, delete,
+   reorder, duration change). The snapshot records each phase's
+   reference + its duration at that moment, so the rebuild can locate
+   each old phase's block in the array even after the mutation. */
+export function snapshotPhases(target) {
+  return target.phases.map(ph => ({ ref: ph, dur: ph.duration || 0 }));
+}
 
+/* Rebuild detailedLoading after a phase mutation. Walks the NEW phase
+   list and, for each phase, looks up its old position (by reference)
+   in the snapshot to find the corresponding block. New phases (not in
+   the snapshot) fill with zeros; deleted phases are naturally dropped.
+   Per-phase duration changes are handled by resampling the old block. */
+export function rebuildDetailedAfterPhaseChange(target, snap) {
+  if (!target.detailedLoading) {
+    ensureDetailedLoading(target);
+    return;
+  }
+  // Build phase-ref → { start, dur } from the snapshot.
+  const oldLayout = new Map();
+  let cursor = 0;
+  for (const s of snap) {
+    oldLayout.set(s.ref, { start: cursor, dur: s.dur });
+    cursor += s.dur;
+  }
   for (const r of state.roles) {
-    const oldArr = target.detailedLoading[r.id] || new Array(oldTotal).fill(0);
+    const oldArr = target.detailedLoading[r.id] || [];
     const newArr = [];
-    // Walk the OLD array per-phase and resample each block to the new
-    // block size. Assumes phases haven't been reordered (just resized).
-    let oldCursor = 0;
-    for (let i = 0; i < newDurs.length; i++) {
-      const oldDur = oldPhaseDurs[i] || 0;
-      const newDur = newDurs[i] || 0;
-      const block = oldArr.slice(oldCursor, oldCursor + oldDur);
-      const resized = resampleArray(block, newDur);
-      for (const v of resized) newArr.push(v);
-      oldCursor += oldDur;
+    for (const newPh of target.phases) {
+      const newDur = newPh.duration || 0;
+      const old = oldLayout.get(newPh);
+      if (!old) {
+        for (let k = 0; k < newDur; k++) newArr.push(0);
+      } else {
+        const block = oldArr.slice(old.start, old.start + old.dur);
+        const resized = resampleArray(block, newDur);
+        for (const v of resized) newArr.push(v);
+      }
     }
     target.detailedLoading[r.id] = newArr;
   }

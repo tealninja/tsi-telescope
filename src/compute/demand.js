@@ -81,51 +81,44 @@ export function computeAllDemand() {
 
     const effDurs = effectivePhaseDurations(proj);
     const effTotal = effDurs.reduce((a,b) => a + b, 0);
-    const useDetailed = proj.loadingMode === 'detailed' && proj.detailedLoading;
+    if (effTotal <= 0) continue;
+    if (!proj.detailedLoading) continue;
 
-    if (useDetailed && effTotal > 0) {
-      // Detailed path: each role's BASE-length array is resampled onto
-      // EFFECTIVE-length, then applied directly to the demand grid.
-      const startIdx = monthsBetween(state.startMonth, proj.startMonth);
-      for (const r of state.roles) {
-        const baseArr = proj.detailedLoading[r.id];
-        if (!Array.isArray(baseArr) || baseArr.length === 0) continue;
-        const arr = resampleArray(baseArr, effTotal);
-        for (let k = 0; k < arr.length; k++) {
-          const mIdx = startIdx + k;
-          if (mIdx >= 0 && mIdx < 36) {
-            demand[r.id][mIdx] += arr[k];
-            projectDemand[proj.id][r.id][mIdx] += arr[k];
-          }
+    // Per-role: take the base-month array, resample (nearest-neighbor)
+    // onto the effective duration, then write into the demand grid.
+    const startIdx = monthsBetween(state.startMonth, proj.startMonth);
+    for (const r of state.roles) {
+      const baseArr = proj.detailedLoading[r.id];
+      if (!Array.isArray(baseArr) || baseArr.length === 0) continue;
+      const arr = resampleArray(baseArr, effTotal);
+      for (let k = 0; k < arr.length; k++) {
+        const mIdx = startIdx + k;
+        if (mIdx >= 0 && mIdx < 36) {
+          demand[r.id][mIdx] += arr[k];
+          projectDemand[proj.id][r.id][mIdx] += arr[k];
         }
       }
-    } else {
-      // Simple path: peak / rampUp / rampDown per phase per role.
-      let cursor = proj.startMonth;
-      proj.phases.forEach((ph, phIdx) => {
-        const N = effDurs[phIdx];
-        for (const r of state.roles) {
-          const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-          const origDur = ph.duration || 1;
-          const rampUpScaled = N > 0 ? Math.round(ld.rampUp * (N / origDur)) : 0;
-          const rampDownScaled = N > 0 ? Math.round(ld.rampDown * (N / origDur)) : 0;
-          const curve = computeLoadCurve(N, ld.peak, rampUpScaled, rampDownScaled);
-          for (let k = 0; k < N; k++) {
-            const mKey = addMonths(cursor, k);
-            const mIdx = monthsBetween(state.startMonth, mKey);
-            if (mIdx >= 0 && mIdx < 36) {
-              const fte = curve[k] / 100;
-              demand[r.id][mIdx] += fte;
-              projectDemand[proj.id][r.id][mIdx] += fte;
-            }
-          }
-        }
-        cursor = addMonths(cursor, N);
-      });
     }
   }
 
   return { demand, projectDemand };
+}
+
+/* One-time migration: ensure every project and template has a
+   detailedLoading array. For data that still carries legacy
+   per-phase peak/rampUp/rampDown values, generate the array from
+   those curves. Legacy values are left in place but unused. */
+export function migrateAllToDetailed() {
+  for (const t of (state.templates || [])) {
+    if (!t.detailedLoading || Object.keys(t.detailedLoading).length === 0) {
+      t.detailedLoading = detailedFromSimple(t);
+    }
+  }
+  for (const p of (state.projects || [])) {
+    if (!p.detailedLoading || Object.keys(p.detailedLoading).length === 0) {
+      p.detailedLoading = detailedFromSimple(p);
+    }
+  }
 }
 
 /* Build a base-month FTE array per role from a target's phase-based

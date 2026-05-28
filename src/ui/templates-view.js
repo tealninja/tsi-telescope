@@ -9,9 +9,9 @@ import { escapeHtml } from '../util/format.js';
 import { deepCopy, uid } from '../util/clone.js';
 import { state, getPhase, getTemplate, saveState } from '../state.js';
 import { buildLoad, defaultLoading } from '../defaults.js';
-import { detailedFromSimple } from '../compute/demand.js';
 import {
-  buildDetailedScheduleSection, wireDetailedSchedule
+  buildDetailedScheduleSection, wireDetailedSchedule,
+  snapshotPhases, rebuildDetailedAfterPhaseChange
 } from './detailed-schedule.js';
 
 export function renderTemplates() {
@@ -139,9 +139,8 @@ function renderTemplateModalBody(t) {
   let phasesHTML = '<table class="phase-table"><thead><tr>' +
     '<th style="width:30px">#</th>' +
     '<th>Phase</th>' +
-    '<th style="width:90px">Duration (mo)</th>' +
-    '<th>Role Loading</th>' +
-    '<th style="width:80px"></th>' +
+    '<th style="width:110px">Duration (months)</th>' +
+    '<th style="width:100px"></th>' +
     '</tr></thead><tbody id="tpl-phases-body">';
   t.phases.forEach((ph, idx) => {
     phasesHTML += renderTemplatePhaseRow(t, ph, idx);
@@ -154,13 +153,7 @@ function renderTemplateModalBody(t) {
     </div>
     <div class="field"><label>Description</label><textarea id="tf-description" rows="2">${escapeHtml(t.description||'')}</textarea></div>
 
-    <div class="section-label" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
-      <span>Phases · Default Role Loading</span>
-      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
-        <button type="button" class="btn ghost small tf-mode-btn${(t.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
-        <button type="button" class="btn ghost small tf-mode-btn${t.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
-      </div>
-    </div>
+    <div class="section-label" style="margin-top:18px">Phases · Duration</div>
     ${phasesHTML}
 
     <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
@@ -169,31 +162,12 @@ function renderTemplateModalBody(t) {
       <button class="btn ghost small" id="tf-add-phase">+ Add Phase</button>
     </div>
 
-    <div id="tf-detailed">${t.loadingMode === 'detailed' ? buildDetailedScheduleSection(t, 'tf') : ''}</div>
+    <div class="section-label" style="margin-top:20px">Default Resource Allocation · FTE per Role per Month</div>
+    <div id="tf-detailed">${buildDetailedScheduleSection(t, 'tf')}</div>
   `;
 
   wireTemplateModal(t);
-  if (t.loadingMode === 'detailed') wireDetailedSchedule(t, 'tf');
-  body.querySelectorAll('.tf-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const newMode = btn.dataset.mode;
-      const curMode = t.loadingMode || 'simple';
-      if (newMode === curMode) return;
-      if (newMode === 'detailed') {
-        if (!t.detailedLoading || Object.keys(t.detailedLoading).length === 0) {
-          t.detailedLoading = detailedFromSimple(t);
-        }
-        t.loadingMode = 'detailed';
-      } else {
-        const hasData = t.detailedLoading && Object.values(t.detailedLoading)
-          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
-        if (hasData && !confirm('Switch back to simple curves? The detailed allocation is kept in the template but ignored at compute time.')) return;
-        t.loadingMode = 'simple';
-      }
-      // Re-render the body from the in-memory `t` so detailed edits survive.
-      renderTemplateModalBody(t);
-    });
-  });
+  wireDetailedSchedule(t, 'tf');
 
   $('#modal-template-save').onclick = () => {
     t.name = $('#tf-name').value;
@@ -216,26 +190,6 @@ function renderTemplatePhaseRow(t, ph, idx) {
         <span class="phase-color-dot" style="background:${phMeta?phMeta.color:'#999'}"></span>${escapeHtml(phMeta?phMeta.name:ph.phaseId)}
       </td>
       <td><input type="number" min="0" step="1" class="t-duration" value="${ph.duration}"></td>
-      <td>
-        <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
-          <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
-          <div class="role-load-grid">
-            <div class="head">Role</div>
-            <div class="head">Peak %</div>
-            <div class="head">Ramp Up (mo)</div>
-            <div class="head">Ramp Down (mo)</div>
-            ${state.roles.map(r => {
-              const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-              return `
-                <div>${escapeHtml(r.name)}</div>
-                <div><input type="number" min="0" step="1" class="t-rl" data-role="${r.id}" data-field="peak" value="${ld.peak}"></div>
-                <div><input type="number" min="0" step="1" class="t-rl" data-role="${r.id}" data-field="rampUp" value="${ld.rampUp}"></div>
-                <div><input type="number" min="0" step="1" class="t-rl" data-role="${r.id}" data-field="rampDown" value="${ld.rampDown}"></div>
-              `;
-            }).join('')}
-          </div>
-        </details>
-      </td>
       <td style="text-align:center;display:flex;gap:2px;justify-content:center;padding:4px">
         <button class="btn ghost small t-up" data-idx="${idx}" title="Move up">↑</button>
         <button class="btn ghost small t-down" data-idx="${idx}" title="Move down">↓</button>
@@ -245,111 +199,85 @@ function renderTemplatePhaseRow(t, ph, idx) {
   `;
 }
 
-function wireTemplateModal(t) {
-  const body = $('#modal-template-body');
+/* Apply a phase mutation while preserving the detailed monthly grid:
+   snapshot the current phase layout, run the mutator, rebuild the
+   detailed array from the snapshot, then re-render the phase table +
+   detailed grid. */
+function withPhaseMutation(t, mutator) {
+  const snap = snapshotPhases(t);
+  mutator();
+  rebuildDetailedAfterPhaseChange(t, snap);
+  rebuildTemplatePhasesAndGrid(t);
+}
 
-  body.querySelectorAll('.t-duration').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const idx = parseInt(tr.dataset.phaseIdx, 10);
-      t.phases[idx].duration = Math.max(0, parseInt(inp.value || '0', 10));
-    });
-  });
-  body.querySelectorAll('.t-rl').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const idx = parseInt(tr.dataset.phaseIdx, 10);
-      const roleId = inp.dataset.role;
-      const field = inp.dataset.field;
-      const v = Math.max(0, parseFloat(inp.value || '0'));
-      if (!t.phases[idx].loading[roleId]) t.phases[idx].loading[roleId] = defaultLoading(0,0,0);
-      t.phases[idx].loading[roleId][field] = v;
-    });
-  });
-  body.querySelectorAll('.t-up').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.idx, 10);
-      if (i > 0) {
-        [t.phases[i-1], t.phases[i]] = [t.phases[i], t.phases[i-1]];
-        rebuildTemplatePhases(t);
-      }
-    });
-  });
-  body.querySelectorAll('.t-down').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.idx, 10);
-      if (i < t.phases.length - 1) {
-        [t.phases[i+1], t.phases[i]] = [t.phases[i], t.phases[i+1]];
-        rebuildTemplatePhases(t);
-      }
-    });
-  });
-  body.querySelectorAll('.t-del').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.idx, 10);
-      if (!confirm(`Remove phase ${i+1}?`)) return;
-      t.phases.splice(i, 1);
-      rebuildTemplatePhases(t);
-    });
-  });
+function wireTemplateModal(t) {
+  bindPhaseHandlers(t);
 
   $('#tf-add-phase').addEventListener('click', () => {
     const phaseId = $('#tf-add-phase-id').value;
     const dur = Math.max(1, parseInt($('#tf-add-phase-dur').value || '1', 10));
-    t.phases.push({ phaseId, duration: dur, loading: buildLoad({}) });
-    rebuildTemplatePhases(t);
+    withPhaseMutation(t, () => {
+      t.phases.push({ phaseId, duration: dur, loading: buildLoad({}) });
+    });
   });
 }
 
-function rebuildTemplatePhases(t) {
-  const tbody = $('#tpl-phases-body');
-  tbody.innerHTML = t.phases.map((ph, idx) => renderTemplatePhaseRow(t, ph, idx)).join('');
-  // Rewire just the phase-related stuff (keep the add-phase form button wired - that one's outside)
-  // Easier to re-call wireTemplateModal but it would double-wire the add button. Instead, re-wire only phase rows.
+/* Re-bindable handlers for the phase-row inputs (duration + reorder + delete).
+   Called on initial wire AND after every phase mutation. */
+function bindPhaseHandlers(t) {
   $$('#tpl-phases-body .t-duration').forEach(inp => {
+    inp.addEventListener('focus', () => { inp._snap = snapshotPhases(t); });
     inp.addEventListener('input', () => {
       const tr = inp.closest('tr');
       const idx = parseInt(tr.dataset.phaseIdx, 10);
       t.phases[idx].duration = Math.max(0, parseInt(inp.value || '0', 10));
     });
-  });
-  $$('#tpl-phases-body .t-rl').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const idx = parseInt(tr.dataset.phaseIdx, 10);
-      const roleId = inp.dataset.role;
-      const field = inp.dataset.field;
-      const v = Math.max(0, parseFloat(inp.value || '0'));
-      if (!t.phases[idx].loading[roleId]) t.phases[idx].loading[roleId] = defaultLoading(0,0,0);
-      t.phases[idx].loading[roleId][field] = v;
+    inp.addEventListener('change', () => {
+      const snap = inp._snap || snapshotPhases(t);
+      delete inp._snap;
+      rebuildDetailedAfterPhaseChange(t, snap);
+      rebuildDetailedGrid(t);
     });
   });
   $$('#tpl-phases-body .t-up').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.dataset.idx, 10);
-      if (i > 0) {
+      if (i > 0) withPhaseMutation(t, () => {
         [t.phases[i-1], t.phases[i]] = [t.phases[i], t.phases[i-1]];
-        rebuildTemplatePhases(t);
-      }
+      });
     });
   });
   $$('#tpl-phases-body .t-down').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.dataset.idx, 10);
-      if (i < t.phases.length - 1) {
+      if (i < t.phases.length - 1) withPhaseMutation(t, () => {
         [t.phases[i+1], t.phases[i]] = [t.phases[i], t.phases[i+1]];
-        rebuildTemplatePhases(t);
-      }
+      });
     });
   });
   $$('#tpl-phases-body .t-del').forEach(btn => {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.dataset.idx, 10);
       if (!confirm(`Remove phase ${i+1}?`)) return;
-      t.phases.splice(i, 1);
-      rebuildTemplatePhases(t);
+      withPhaseMutation(t, () => {
+        t.phases.splice(i, 1);
+      });
     });
   });
+}
+
+function rebuildTemplatePhasesAndGrid(t) {
+  const tbody = $('#tpl-phases-body');
+  tbody.innerHTML = t.phases.map((ph, idx) => renderTemplatePhaseRow(t, ph, idx)).join('');
+  bindPhaseHandlers(t);
+  rebuildDetailedGrid(t);
+}
+
+function rebuildDetailedGrid(t) {
+  const wrap = $('#tf-detailed');
+  if (!wrap) return;
+  wrap.innerHTML = buildDetailedScheduleSection(t, 'tf');
+  wireDetailedSchedule(t, 'tf');
 }
 
 function closeTemplateModal() {

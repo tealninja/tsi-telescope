@@ -16,12 +16,13 @@ import { deepCopy, deepCopyMilestones, uid } from '../util/clone.js';
 import {
   state, getPhase, getTemplate, getLocation, getProject, saveState
 } from '../state.js';
-import { totalEffectiveDuration, detailedFromSimple } from '../compute/demand.js';
+import { totalEffectiveDuration } from '../compute/demand.js';
 import {
-  buildDetailedScheduleSection, wireDetailedSchedule, resizeDetailedToPhases
+  buildDetailedScheduleSection, wireDetailedSchedule,
+  snapshotPhases, rebuildDetailedAfterPhaseChange
 } from './detailed-schedule.js';
 import {
-  DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED, defaultLoading
+  DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED
 } from '../defaults.js';
 import { renderAll } from '../boot.js';
 import { toast } from '../util/dom.js';
@@ -45,7 +46,8 @@ export function openProjectModal(projectId) {
       templateId: tpl.id,
       startMonth: monthKey(new Date()),
       notes: '',
-      phases: deepCopy(tpl.phases)
+      phases: deepCopy(tpl.phases),
+      detailedLoading: tpl.detailedLoading ? deepCopy(tpl.detailedLoading) : {}
     };
   } else {
     p = deepCopy(getProject(projectId));
@@ -94,41 +96,20 @@ function buildProjectForm(p) {
   let phasesHTML = '<table class="phase-table"><thead><tr>' +
     '<th style="width:30px">#</th>' +
     '<th>Phase</th>' +
-    '<th style="width:95px">Base Dur (mo)</th>' +
-    '<th style="width:95px">Effective (mo)</th>' +
-    '<th>Role Loading (Peak% / Ramp Up / Ramp Down)</th>' +
+    '<th style="width:120px">Base Dur (months)</th>' +
+    '<th style="width:120px">Effective (months)</th>' +
     '</tr></thead><tbody>';
   p.phases.forEach((ph, idx) => {
     const phMeta = getPhase(ph.phaseId);
     const effDur = ph.duration > 0 ? Math.max(1, Math.round(ph.duration * mult)) : 0;
     phasesHTML += `
       <tr data-phase-idx="${idx}">
-        <td>${idx+1}</td>
+        <td class="mono">${idx+1}</td>
         <td class="phase-name">
           <span class="phase-color-dot" style="background:${phMeta?phMeta.color:'#999'}"></span>${escapeHtml(phMeta?phMeta.name:ph.phaseId)}
         </td>
         <td><input type="number" min="0" step="1" class="ph-duration" value="${ph.duration}"></td>
         <td><span class="eff-dur mono" style="color:var(--teal);font-weight:600">${effDur}</span></td>
-        <td>
-          <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
-            <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
-            <div class="role-load-grid">
-              <div class="head">Role</div>
-              <div class="head">Peak %</div>
-              <div class="head">Ramp Up (mo)</div>
-              <div class="head">Ramp Down (mo)</div>
-              ${state.roles.map(r => {
-                const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-                return `
-                  <div>${escapeHtml(r.name)}</div>
-                  <div><input type="number" min="0" step="1" class="rl" data-role="${r.id}" data-field="peak" value="${ld.peak}"></div>
-                  <div><input type="number" min="0" step="1" class="rl" data-role="${r.id}" data-field="rampUp" value="${ld.rampUp}"></div>
-                  <div><input type="number" min="0" step="1" class="rl" data-role="${r.id}" data-field="rampDown" value="${ld.rampDown}"></div>
-                `;
-              }).join('')}
-            </div>
-          </details>
-        </td>
       </tr>
     `;
   });
@@ -184,15 +165,11 @@ function buildProjectForm(p) {
     <div class="section-label" style="margin-top:20px">Commercial · Contract &amp; Billing</div>
     ${buildBillingSection(p)}
 
-    <div class="section-label" style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
-      <span>Phases · Role Loading</span>
-      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
-        <button type="button" class="btn ghost small pf-mode-btn${(p.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
-        <button type="button" class="btn ghost small pf-mode-btn${p.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
-      </div>
-    </div>
+    <div class="section-label" style="margin-top:20px">Phases · Duration</div>
     <div id="pf-phases">${phasesHTML}</div>
-    <div id="pf-detailed">${(p.loadingMode==='detailed') ? buildDetailedScheduleSection(p, 'pf') : ''}</div>
+
+    <div class="section-label" style="margin-top:20px">Resource Allocation · FTE per Role per Month</div>
+    <div id="pf-detailed">${buildDetailedScheduleSection(p, 'pf')}</div>
   `;
 }
 
@@ -341,10 +318,6 @@ function renderMilestoneRow(m, i, anchorOpts, cv) {
   `;
 }
 
-function countActiveRoles(loading) {
-  return Object.values(loading).filter(l => l.peak > 0).length;
-}
-
 function wireProjectForm(p) {
   const tplSel = $('#pf-template');
   tplSel.addEventListener('change', () => {
@@ -354,6 +327,7 @@ function wireProjectForm(p) {
     p.templateId = tplSel.value;
     const tpl = getTemplate(p.templateId);
     p.phases = deepCopy(tpl.phases);
+    p.detailedLoading = tpl.detailedLoading ? deepCopy(tpl.detailedLoading) : {};
     if (tpl.defaultContractValue != null) p.contractValue = tpl.defaultContractValue;
     if (tpl.billingMode) p.billingMode = tpl.billingMode;
     if (tpl.milestones) p.milestones = deepCopyMilestones(tpl.milestones);
@@ -385,39 +359,7 @@ function wireProjectForm(p) {
   wireProjectFormPhases(p);
   wireBillingForm(p);
   wireWinProbForm(p);
-  wireScheduleModeToggle(p);
-  if ((p.loadingMode || 'simple') === 'detailed') {
-    wireDetailedSchedule(p, 'pf');
-  }
-}
-
-function wireScheduleModeToggle(p) {
-  $('#modal-project-body').querySelectorAll('.pf-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const newMode = btn.dataset.mode;
-      const curMode = p.loadingMode || 'simple';
-      if (newMode === curMode) return;
-      if (newMode === 'detailed') {
-        // Seed the detailed array from current phase curves if empty
-        if (!p.detailedLoading || Object.keys(p.detailedLoading).length === 0) {
-          p.detailedLoading = detailedFromSimple(p);
-        }
-        p.loadingMode = 'detailed';
-      } else {
-        // Switching back to simple — confirm before discarding
-        const hasData = p.detailedLoading && Object.values(p.detailedLoading)
-          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
-        if (hasData && !confirm('Switch back to simple curves? The detailed per-month allocation will be kept on the side but ignored at compute time. Switching back to Detailed later restores it.')) {
-          return;
-        }
-        p.loadingMode = 'simple';
-      }
-      // Re-render the modal body to reflect mode
-      const body = $('#modal-project-body');
-      body.innerHTML = buildProjectForm(p);
-      wireProjectForm(p);
-    });
-  });
+  wireDetailedSchedule(p, 'pf');
 }
 
 function wireWinProbForm(p) {
@@ -614,24 +556,35 @@ function refreshMilestoneSum(p) {
 }
 
 function wireProjectFormPhases(p) {
+  // On `change` (not `input`) so the user finishes typing before we
+  // resize the detailed grid — otherwise every keystroke would rebuild.
   $$('#pf-phases .ph-duration').forEach(inp => {
     inp.addEventListener('input', () => {
+      // Live effective-duration display feedback only; no rebuild.
       const v = Math.max(0, parseInt(inp.value || '0', 10));
       const tr = inp.closest('tr');
       const phaseIdx = parseInt(tr.dataset.phaseIdx, 10);
       p.phases[phaseIdx].duration = v;
       updateEffDurs(p);
     });
-  });
-  $$('#pf-phases .rl').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const tr = inp.closest('tr');
-      const phaseIdx = parseInt(tr.dataset.phaseIdx, 10);
-      const roleId = inp.dataset.role;
-      const field = inp.dataset.field;
-      const v = Math.max(0, parseFloat(inp.value || '0'));
-      if (!p.phases[phaseIdx].loading[roleId]) p.phases[phaseIdx].loading[roleId] = defaultLoading(0,0,0);
-      p.phases[phaseIdx].loading[roleId][field] = v;
+    inp.addEventListener('change', () => {
+      // Commit: snapshot the OLD layout (with old durations now lost), so we
+      // rebuild using the snapshot captured on focus. We use the focus
+      // snapshot rather than recomputing.
+      const snap = inp._phaseSnap || snapshotPhases(p);
+      delete inp._phaseSnap;
+      rebuildDetailedAfterPhaseChange(p, snap);
+      // Re-render the detailed grid in place.
+      const wrap = $('#pf-detailed');
+      if (wrap) {
+        wrap.innerHTML = buildDetailedScheduleSection(p, 'pf');
+        wireDetailedSchedule(p, 'pf');
+      }
+    });
+    inp.addEventListener('focus', () => {
+      // Capture the layout BEFORE the user starts editing, so the change
+      // handler has access to the old durations.
+      inp._phaseSnap = snapshotPhases(p);
     });
   });
 }

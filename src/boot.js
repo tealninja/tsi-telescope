@@ -16,6 +16,7 @@ import {
   getTemplate,
   saveState, loadState, seedSampleProjects
 } from './state.js';
+import { migrateAllToDetailed } from './compute/demand.js';
 import { renderRoles } from './ui/roles-view.js';
 import { renderLocations } from './ui/locations-view.js';
 import { renderCapacity } from './ui/capacity-view.js';
@@ -101,6 +102,7 @@ $('#file-import').addEventListener('change', (e) => {
           if (src) { p.lat = src.lat; p.lng = src.lng; }
         }
       }
+      migrateAllToDetailed();
       saveState();
       renderAll();
       toast('Imported plan');
@@ -125,6 +127,7 @@ $('#btn-reset').addEventListener('click', () => {
     capacity: {}
   });
   seedSampleProjects();
+  migrateAllToDetailed();
   saveState();
   renderAll();
   toast('Reset to defaults');
@@ -210,6 +213,10 @@ if (!loadState()) {
     if (!state.capacity[r.id]) state.capacity[r.id] = new Array(36).fill(0);
   }
 }
+// Convert any legacy per-phase peak/rampUp/rampDown curves into the
+// detailed monthly grid so the rest of the app has a single source of truth.
+migrateAllToDetailed();
+saveState();
 renderAll();
 
 window.addEventListener('beforeunload', saveState);
