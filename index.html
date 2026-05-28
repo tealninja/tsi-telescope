@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles/tsi.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 </head>
 <body>
 
@@ -27,6 +29,7 @@
 <nav class="tabs">
   <div class="tab active" data-view="dashboard">Dashboard</div>
   <div class="tab" data-view="projects">Projects</div>
+  <div class="tab" data-view="map">Map</div>
   <div class="tab" data-view="capacity">Capacity</div>
   <div class="tab" data-view="gantt">Gantt</div>
   <div class="tab" data-view="histogram">Demand Histogram</div>
@@ -85,6 +88,38 @@
     </div>
 
     <div class="kpi-row" id="kpi-row"></div>
+  </section>
+
+  <!-- MAP VIEW -->
+  <section class="view" id="view-map">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Geography</div>
+          <div class="panel-title">Portfolio Map · Orthographic Globe</div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="margin:0">Color by</label>
+            <select id="map-color-by" style="width:auto;font-size:12px">
+              <option value="winprob" selected>Win probability</option>
+              <option value="template">Template</option>
+              <option value="value">Contract value</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer">
+            <input type="checkbox" id="map-graticule" checked style="width:auto;margin:0;cursor:pointer">
+            Graticule
+          </label>
+          <button class="btn ghost small" id="map-reset-view">Reset View</button>
+          <span>drag to rotate · scroll to zoom</span>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="map-wrap" id="map-wrap"></div>
+        <div class="legend" id="map-legend"></div>
+      </div>
+    </div>
   </section>
 
   <!-- CAPACITY VIEW -->

@@ -83,8 +83,21 @@ export function loadState() {
       }
       if (p.pinned == null) p.pinned = false;
       if (p.winProbability == null) p.winProbability = 100;
+      if (p.lat == null || p.lng == null) {
+        const loc = state.locations && state.locations.find(l => l.id === p.locationId);
+        const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
+        const src = (loc && loc.lat != null) ? loc : def;
+        if (src) { p.lat = src.lat; p.lng = src.lng; }
+      }
     }
     if (!state.locations) state.locations = deepCopy(DEFAULT_LOCATIONS);
+    // Backfill lat/lng on stored locations from defaults if missing.
+    for (const l of state.locations) {
+      if (l.lat == null || l.lng == null) {
+        const def = DEFAULT_LOCATIONS.find(d => d.id === l.id);
+        if (def) { l.lat = def.lat; l.lng = def.lng; }
+      }
+    }
     return true;
   } catch (e) {
     console.error('Load failed', e);
@@ -96,7 +109,7 @@ export function seedSampleProjects() {
   const today = new Date();
   const m0 = monthKey(today);
 
-  function seed(name, client, location, locationId, templateId, startMonth, notes, contractValue, winProb) {
+  function seed(name, client, location, locationId, templateId, startMonth, notes, contractValue, winProb, lat, lng) {
     const tpl = getTemplate(templateId);
     return {
       id: uid('proj'),
@@ -107,23 +120,28 @@ export function seedSampleProjects() {
       milestones: deepCopyMilestones(tpl.milestones || DEFAULT_MILESTONE_SCHED),
       costLines: deepCopyMilestones(tpl.costLines || DEFAULT_COST_SCHED),
       pinned: false,
-      winProbability: winProb != null ? winProb : 100
+      winProbability: winProb != null ? winProb : 100,
+      lat, lng
     };
   }
 
   state.projects = [
     seed('Northwest Pellet Co. — Dryer #2', 'Northwest Pellet Co.', 'Spokane, WA', 'us',
          'dryer_small', addMonths(m0, -2),
-         'Standard drum dryer, mid-tier complexity. Contract signed Q1.', 3500000, 100),
+         'Standard drum dryer, mid-tier complexity. Contract signed Q1.', 3500000, 100,
+         47.6588, -117.4260),
     seed('Austwood Vietnam — Torreactor', 'Austwood', 'Binh Phuoc, Vietnam', 'vn_sea',
          'torre_comm', addMonths(m0, 1),
-         'Commercial Torreactor, local fab partner. LOI received, finalizing terms.', 28000000, 75),
+         'Commercial Torreactor, local fab partner. LOI received, finalizing terms.', 28000000, 75,
+         11.7512, 107.0245),
     seed('Lighthouse Green Fuels', 'Alfanar', 'Stockton-on-Tees, UK', 'uk',
          'torre_comm', addMonths(m0, 4),
-         'UK SAF feedstock torrefaction. Active in PQQ stage with consortium.', 42000000, 40),
+         'UK SAF feedstock torrefaction. Active in PQQ stage with consortium.', 42000000, 40,
+         54.5614, -1.3175),
     seed('TBD FEED — European Customer', 'Confidential', 'Germany', 'eu',
          'feed', addMonths(m0, 2),
-         'FEED study for a torrefaction plant. NDA signed, scoping discussions ongoing.', 480000, 60)
+         'FEED study for a torrefaction plant. NDA signed, scoping discussions ongoing.', 480000, 60,
+         51.1657, 10.4515)
   ];
 
   for (const r of state.roles) {

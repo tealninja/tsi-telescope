@@ -742,6 +742,45 @@
   }
 
   /* ================================================================
+     MAP / GLOBE
+     ================================================================ */
+  .map-wrap {
+    width: 100%;
+    height: 640px;
+    background: var(--warm-white);
+    position: relative;
+    overflow: hidden;
+  }
+  .map-wrap svg { width: 100%; height: 100%; display: block; cursor: grab; }
+  .map-wrap svg.dragging { cursor: grabbing; }
+  .map-sphere     { fill: #DCE6EA; }
+  .map-graticule  { fill: none; stroke: #C8D1D6; stroke-width: 0.5; }
+  .map-land       { fill: #F4EFE5; stroke: #C8C2B0; stroke-width: 0.5; }
+  .map-marker     { stroke: #FAF8F4; stroke-width: 1.5; cursor: pointer; transition: stroke-width 120ms; }
+  .map-marker:hover { stroke-width: 3; }
+  .map-marker.pinned { stroke: var(--deep-slate); stroke-width: 2; }
+  .map-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--ink-strong);
+    pointer-events: none;
+    paint-order: stroke fill;
+    stroke: var(--bg-canvas);
+    stroke-width: 3;
+    stroke-linejoin: round;
+  }
+  .map-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray);
+    font-size: 12px;
+    pointer-events: none;
+  }
+
+  /* ================================================================
      TOOLTIP
      ================================================================ */
   .tooltip {
@@ -868,6 +907,8 @@
   }
 
 </style>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 </head>
 <body>
 
@@ -887,6 +928,7 @@
 <nav class="tabs">
   <div class="tab active" data-view="dashboard">Dashboard</div>
   <div class="tab" data-view="projects">Projects</div>
+  <div class="tab" data-view="map">Map</div>
   <div class="tab" data-view="capacity">Capacity</div>
   <div class="tab" data-view="gantt">Gantt</div>
   <div class="tab" data-view="histogram">Demand Histogram</div>
@@ -945,6 +987,38 @@
     </div>
 
     <div class="kpi-row" id="kpi-row"></div>
+  </section>
+
+  <!-- MAP VIEW -->
+  <section class="view" id="view-map">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Geography</div>
+          <div class="panel-title">Portfolio Map · Orthographic Globe</div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="margin:0">Color by</label>
+            <select id="map-color-by" style="width:auto;font-size:12px">
+              <option value="winprob" selected>Win probability</option>
+              <option value="template">Template</option>
+              <option value="value">Contract value</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer">
+            <input type="checkbox" id="map-graticule" checked style="width:auto;margin:0;cursor:pointer">
+            Graticule
+          </label>
+          <button class="btn ghost small" id="map-reset-view">Reset View</button>
+          <span>drag to rotate · scroll to zoom</span>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="map-wrap" id="map-wrap"></div>
+        <div class="legend" id="map-legend"></div>
+      </div>
+    </div>
   </section>
 
   <!-- CAPACITY VIEW -->
@@ -1352,11 +1426,11 @@ const DEFAULT_PHASES = [
 ];
 
 const DEFAULT_LOCATIONS = [
-  { id: 'us',     name: 'USA / North America', multiplier: 1.00, notes: 'Baseline. Standard procurement lead times, OSHA compliance, in-house QA travel.' },
-  { id: 'vn_sea', name: 'Vietnam / SE Asia',   multiplier: 0.70, notes: 'Faster execution. Lower-cost local fab, parallel labor, shorter customs clearance. Use Austwood/local partners.' },
-  { id: 'eu',     name: 'Europe (EU)',         multiplier: 1.10, notes: 'CE marking, machinery directive overhead, ATEX where applicable. Engineering similar to US, regulatory adds ~10%.' },
-  { id: 'uk',     name: 'United Kingdom',      multiplier: 1.20, notes: 'Slower procurement post-Brexit, UKCA compliance. Engineering similar to US.' },
-  { id: 'br_sa',  name: 'Brazil / South America', multiplier: 1.15, notes: 'INMETRO certification, longer customs, currency hedging in commercial phase.' }
+  { id: 'us',     name: 'USA / North America', multiplier: 1.00, lat:  39.83, lng:  -98.58, notes: 'Baseline. Standard procurement lead times, OSHA compliance, in-house QA travel.' },
+  { id: 'vn_sea', name: 'Vietnam / SE Asia',   multiplier: 0.70, lat:  16.05, lng:  108.20, notes: 'Faster execution. Lower-cost local fab, parallel labor, shorter customs clearance. Use Austwood/local partners.' },
+  { id: 'eu',     name: 'Europe (EU)',         multiplier: 1.10, lat:  51.16, lng:   10.45, notes: 'CE marking, machinery directive overhead, ATEX where applicable. Engineering similar to US, regulatory adds ~10%.' },
+  { id: 'uk',     name: 'United Kingdom',      multiplier: 1.20, lat:  54.00, lng:   -2.00, notes: 'Slower procurement post-Brexit, UKCA compliance. Engineering similar to US.' },
+  { id: 'br_sa',  name: 'Brazil / South America', multiplier: 1.15, lat: -10.00, lng: -55.00, notes: 'INMETRO certification, longer customs, currency hedging in commercial phase.' }
 ];
 
 function defaultLoading(peak, rampUp, rampDown) {
@@ -1783,8 +1857,21 @@ function loadState() {
       }
       if (p.pinned == null) p.pinned = false;
       if (p.winProbability == null) p.winProbability = 100;
+      if (p.lat == null || p.lng == null) {
+        const loc = state.locations && state.locations.find(l => l.id === p.locationId);
+        const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
+        const src = (loc && loc.lat != null) ? loc : def;
+        if (src) { p.lat = src.lat; p.lng = src.lng; }
+      }
     }
     if (!state.locations) state.locations = deepCopy(DEFAULT_LOCATIONS);
+    // Backfill lat/lng on stored locations from defaults if missing.
+    for (const l of state.locations) {
+      if (l.lat == null || l.lng == null) {
+        const def = DEFAULT_LOCATIONS.find(d => d.id === l.id);
+        if (def) { l.lat = def.lat; l.lng = def.lng; }
+      }
+    }
     return true;
   } catch (e) {
     console.error('Load failed', e);
@@ -1796,7 +1883,7 @@ function seedSampleProjects() {
   const today = new Date();
   const m0 = monthKey(today);
 
-  function seed(name, client, location, locationId, templateId, startMonth, notes, contractValue, winProb) {
+  function seed(name, client, location, locationId, templateId, startMonth, notes, contractValue, winProb, lat, lng) {
     const tpl = getTemplate(templateId);
     return {
       id: uid('proj'),
@@ -1807,23 +1894,28 @@ function seedSampleProjects() {
       milestones: deepCopyMilestones(tpl.milestones || DEFAULT_MILESTONE_SCHED),
       costLines: deepCopyMilestones(tpl.costLines || DEFAULT_COST_SCHED),
       pinned: false,
-      winProbability: winProb != null ? winProb : 100
+      winProbability: winProb != null ? winProb : 100,
+      lat, lng
     };
   }
 
   state.projects = [
     seed('Northwest Pellet Co. — Dryer #2', 'Northwest Pellet Co.', 'Spokane, WA', 'us',
          'dryer_small', addMonths(m0, -2),
-         'Standard drum dryer, mid-tier complexity. Contract signed Q1.', 3500000, 100),
+         'Standard drum dryer, mid-tier complexity. Contract signed Q1.', 3500000, 100,
+         47.6588, -117.4260),
     seed('Austwood Vietnam — Torreactor', 'Austwood', 'Binh Phuoc, Vietnam', 'vn_sea',
          'torre_comm', addMonths(m0, 1),
-         'Commercial Torreactor, local fab partner. LOI received, finalizing terms.', 28000000, 75),
+         'Commercial Torreactor, local fab partner. LOI received, finalizing terms.', 28000000, 75,
+         11.7512, 107.0245),
     seed('Lighthouse Green Fuels', 'Alfanar', 'Stockton-on-Tees, UK', 'uk',
          'torre_comm', addMonths(m0, 4),
-         'UK SAF feedstock torrefaction. Active in PQQ stage with consortium.', 42000000, 40),
+         'UK SAF feedstock torrefaction. Active in PQQ stage with consortium.', 42000000, 40,
+         54.5614, -1.3175),
     seed('TBD FEED — European Customer', 'Confidential', 'Germany', 'eu',
          'feed', addMonths(m0, 2),
-         'FEED study for a torrefaction plant. NDA signed, scoping discussions ongoing.', 480000, 60)
+         'FEED study for a torrefaction plant. NDA signed, scoping discussions ongoing.', 480000, 60,
+         51.1657, 10.4515)
   ];
 
   for (const r of state.roles) {
@@ -1961,8 +2053,10 @@ function renderLocations() {
   list.innerHTML = `
     <table class="phase-table" style="width:100%">
       <thead><tr>
-        <th style="width:240px">Location</th>
-        <th style="width:120px">Multiplier</th>
+        <th style="width:200px">Location</th>
+        <th style="width:90px">Multiplier</th>
+        <th style="width:90px">Lat</th>
+        <th style="width:90px">Lng</th>
         <th>Notes</th>
         <th style="width:80px"></th>
       </tr></thead>
@@ -1973,6 +2067,8 @@ function renderLocations() {
             <td>
               <input type="number" data-lf="multiplier" step="0.05" min="0.1" max="3.0" value="${l.multiplier}" class="mono" style="font-weight:600;color:var(--teal);text-align:center">
             </td>
+            <td><input type="number" data-lf="lat" step="0.01" min="-90"  max="90"  value="${l.lat != null ? l.lat : ''}" class="mono" style="text-align:right"></td>
+            <td><input type="number" data-lf="lng" step="0.01" min="-180" max="180" value="${l.lng != null ? l.lng : ''}" class="mono" style="text-align:right"></td>
             <td><input type="text" data-lf="notes" value="${escapeHtml(l.notes||'')}"></td>
             <td style="text-align:center"><button class="btn danger small" data-ldel="${l.id}">Del</button></td>
           </tr>
@@ -2000,6 +2096,9 @@ function renderLocations() {
         const v = Math.max(0.1, Math.min(3.0, parseFloat(inp.value || '1')));
         loc.multiplier = v;
         inp.value = v;
+      } else if (field === 'lat' || field === 'lng') {
+        const v = parseFloat(inp.value);
+        loc[field] = Number.isFinite(v) ? v : null;
       } else {
         loc[field] = inp.value;
       }
@@ -2349,6 +2448,15 @@ function buildProjectForm(p) {
       </div>
     </div>
     <div class="field-row">
+      <div class="field"><label>Latitude</label>
+        <input type="number" id="pf-lat" step="0.0001" min="-90" max="90" value="${p.lat != null ? p.lat : ''}" class="mono" placeholder="e.g. 47.6588">
+        <div class="helper">Decimal degrees. Defaults to the location's centroid; override for a precise site.</div>
+      </div>
+      <div class="field"><label>Longitude</label>
+        <input type="number" id="pf-lng" step="0.0001" min="-180" max="180" value="${p.lng != null ? p.lng : ''}" class="mono" placeholder="e.g. -117.4260">
+      </div>
+    </div>
+    <div class="field-row">
       <div class="field" style="flex:2"><label>Win Probability (Pipeline Stage)</label>
         <div style="display:flex;gap:10px;align-items:center">
           <input type="range" id="pf-winprob" min="0" max="100" step="5" value="${p.winProbability != null ? p.winProbability : 100}" style="flex:1">
@@ -2542,6 +2650,19 @@ function wireProjectForm(p) {
   const locSel = $('#pf-loc-id');
   locSel.addEventListener('change', () => {
     p.locationId = locSel.value;
+    // Auto-fill lat/lng with the new location's centroid if the user
+    // hasn't typed anything specific. Useful when picking a country
+    // from the dropdown — markers land in roughly the right place.
+    const newLoc = getLocation(p.locationId);
+    if (newLoc && newLoc.lat != null && newLoc.lng != null) {
+      const latInp = $('#pf-lat'), lngInp = $('#pf-lng');
+      if (latInp && (latInp.value === '' || confirm('Move project pin to ' + newLoc.name + ' centroid?'))) {
+        latInp.value = newLoc.lat;
+        lngInp.value = newLoc.lng;
+        p.lat = newLoc.lat;
+        p.lng = newLoc.lng;
+      }
+    }
     updateEffDurs(p);
   });
 
@@ -2790,6 +2911,10 @@ function readProjectForm(p) {
   p.locationId = $('#pf-loc-id').value;
   p.startMonth = $('#pf-start').value;
   p.notes = $('#pf-notes').value;
+  const lat = parseFloat($('#pf-lat').value);
+  const lng = parseFloat($('#pf-lng').value);
+  p.lat = Number.isFinite(lat) ? lat : null;
+  p.lng = Number.isFinite(lng) ? lng : null;
   return p;
 }
 
@@ -6207,11 +6332,333 @@ function card(label, value, sub, cls) {
 }
 
 
+/* ===== src/ui/map-view.js ===== */
+/* ============================================================
+   Map view  ·  orthographic D3 globe with project markers.
+
+   World boundaries come from world-atlas (TopoJSON), fetched
+   on first render and cached in localStorage so subsequent
+   reloads work offline.
+
+   Interaction:
+     – drag to rotate (azimuthal yaw + clamped pitch)
+     – scroll to zoom (scales projection radius)
+     – click marker → open the project's detail modal
+     – hover marker → tooltip with name, location, contract,
+       win-prob stage
+
+   Markers:
+     – sized by sqrt(contractValue) so big projects don't
+       swamp the small ones visually
+     – colored by win-prob / template / contract value
+       (chosen via the "Color by" selector)
+     – pinned projects get a darker stroke
+     – hidden when on the far side of the globe (back hemisphere)
+   ============================================================ */
+
+
+
+
+
+const WORLD_URL   = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+const CACHE_KEY   = 'tsi_world_topo_v1';
+let _worldCache   = null;     // resolved TopoJSON object
+let _loading      = null;     // in-flight fetch promise (deduped)
+let _rotation     = [-10, -20, 0];
+let _scale        = null;     // computed at first render from container size
+let _colorBy      = 'winprob';
+let _showGratic   = true;
+
+function renderMap() {
+  const wrap = $('#map-wrap');
+  if (!wrap) return;
+
+  // Re-attach control handlers idempotently on every render — they're cheap
+  // and this view re-renders every time it's tabbed to or state changes.
+  wireControlsOnce();
+
+  // No D3 available? Show a status message and bail.
+  if (typeof d3 === 'undefined' || typeof topojson === 'undefined') {
+    wrap.innerHTML = `<div class="map-status">– d3 / topojson failed to load. Check network or the &lt;script&gt; tags in index.html.</div>`;
+    return;
+  }
+
+  if (_worldCache) {
+    draw(wrap, _worldCache);
+    return;
+  }
+
+  // Try cached topojson first
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      _worldCache = JSON.parse(cached);
+      draw(wrap, _worldCache);
+      return;
+    }
+  } catch (e) { /* fall through to fetch */ }
+
+  wrap.innerHTML = `<div class="map-status">– Loading world boundaries…</div>`;
+  if (!_loading) {
+    _loading = fetch(WORLD_URL)
+      .then(r => r.json())
+      .then(topo => {
+        _worldCache = topo;
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(topo)); } catch (e) { /* quota */ }
+        return topo;
+      })
+      .catch(err => {
+        console.error('World fetch failed', err);
+        return null;
+      });
+  }
+  _loading.then(topo => {
+    if (!topo) {
+      wrap.innerHTML = `<div class="map-status">– Failed to load world boundaries. Markers only:</div>`;
+      drawMarkersOnly(wrap);
+      return;
+    }
+    draw(wrap, topo);
+  });
+}
+
+function wireControlsOnce() {
+  const sel = $('#map-color-by');
+  if (sel && !sel._wired) {
+    sel._wired = true;
+    sel.addEventListener('change', () => {
+      _colorBy = sel.value;
+      renderMap();
+    });
+  }
+  const grat = $('#map-graticule');
+  if (grat && !grat._wired) {
+    grat._wired = true;
+    grat.addEventListener('change', () => {
+      _showGratic = grat.checked;
+      renderMap();
+    });
+  }
+  const reset = $('#map-reset-view');
+  if (reset && !reset._wired) {
+    reset._wired = true;
+    reset.addEventListener('click', () => {
+      _rotation = [-10, -20, 0];
+      _scale = null;
+      renderMap();
+    });
+  }
+}
+
+function draw(wrap, topo) {
+  const w = wrap.clientWidth || 800;
+  const h = wrap.clientHeight || 640;
+  const cx = w / 2, cy = h / 2;
+  if (_scale == null) _scale = Math.min(w, h) * 0.42;
+
+  const projection = d3.geoOrthographic()
+    .scale(_scale)
+    .translate([cx, cy])
+    .rotate(_rotation)
+    .clipAngle(90);
+  const path = d3.geoPath(projection);
+
+  const land = topojson.feature(topo, topo.objects.countries);
+  const graticule = d3.geoGraticule10();
+  const sphere = { type: 'Sphere' };
+
+  // Build SVG fresh — this view re-renders on every interaction.
+  wrap.innerHTML = '';
+  const svg = d3.select(wrap).append('svg')
+    .attr('viewBox', `0 0 ${w} ${h}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  const gWorld = svg.append('g');
+  gWorld.append('path').datum(sphere).attr('class','map-sphere').attr('d', path);
+  if (_showGratic) {
+    gWorld.append('path').datum(graticule).attr('class','map-graticule').attr('d', path);
+  }
+  gWorld.append('path').datum(land).attr('class','map-land').attr('d', path);
+
+  const gMarkers = svg.append('g').attr('class','map-markers');
+
+  drawMarkers(gMarkers, projection, w, h);
+  renderLegend();
+
+  // ---- Drag to rotate ----
+  let dragging = false;
+  svg.call(d3.drag()
+    .on('start', () => { dragging = true; svg.classed('dragging', true); hideTip(); })
+    .on('drag',  (e) => {
+      _rotation[0] += e.dx * 0.3;
+      _rotation[1] -= e.dy * 0.3;
+      _rotation[1] = Math.max(-89, Math.min(89, _rotation[1]));
+      projection.rotate(_rotation);
+      gWorld.selectAll('.map-sphere').attr('d', path);
+      gWorld.selectAll('.map-graticule').attr('d', path);
+      gWorld.selectAll('.map-land').attr('d', path);
+      drawMarkers(gMarkers, projection, w, h);
+    })
+    .on('end', () => { dragging = false; svg.classed('dragging', false); })
+  );
+
+  // ---- Wheel to zoom ----
+  svg.on('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1/1.15;
+    _scale = Math.max(80, Math.min(2400, _scale * factor));
+    projection.scale(_scale);
+    gWorld.selectAll('.map-sphere').attr('d', path);
+    gWorld.selectAll('.map-graticule').attr('d', path);
+    gWorld.selectAll('.map-land').attr('d', path);
+    drawMarkers(gMarkers, projection, w, h);
+  }, { passive: false });
+}
+
+function drawMarkersOnly(wrap) {
+  // No basemap available — still place markers on a blank background so
+  // the view isn't useless. Uses an equirectangular projection so all
+  // markers are visible at once (no back-hemisphere clipping).
+  const w = wrap.clientWidth || 800;
+  const h = wrap.clientHeight || 640;
+  wrap.innerHTML = '';
+  const svg = d3.select(wrap).append('svg')
+    .attr('viewBox', `0 0 ${w} ${h}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+  const projection = d3.geoEquirectangular().fitSize([w, h], { type:'Sphere' });
+  const gMarkers = svg.append('g').attr('class','map-markers');
+  drawMarkers(gMarkers, projection, w, h);
+  renderLegend();
+}
+
+function drawMarkers(g, projection, w, h) {
+  g.selectAll('*').remove();
+
+  const center = projection.invert ? projection.invert([w/2, h/2]) : null;
+  const visible = state.projects.filter(p => p.lat != null && p.lng != null);
+
+  // Marker size: sqrt of contract value so 1B doesn't dwarf 1M.
+  const values = visible.map(p => Math.max(0, p.contractValue || 0));
+  const maxVal = Math.max(1, ...values);
+  const rScale = v => 4 + 12 * Math.sqrt(v / maxVal);
+
+  for (const p of visible) {
+    const point = projection([p.lng, p.lat]);
+    if (!point) continue;
+
+    // Hide markers on the back of the globe (only when we have a real center)
+    if (center) {
+      const dist = d3.geoDistance([p.lng, p.lat], center);
+      if (dist > Math.PI / 2) continue;
+    }
+
+    const r = rScale(p.contractValue || 0);
+    const color = markerColor(p);
+    const circle = g.append('circle')
+      .attr('class', 'map-marker' + (p.pinned ? ' pinned' : ''))
+      .attr('cx', point[0])
+      .attr('cy', point[1])
+      .attr('r', r)
+      .attr('fill', color)
+      .attr('fill-opacity', 0.88);
+
+    circle.on('mouseover', (e) => showMarkerTip(e, p))
+          .on('mousemove', (e) => moveTip(e))
+          .on('mouseout', hideTip)
+          .on('click', () => openProjectDetailModal(p.id));
+  }
+}
+
+function markerColor(p) {
+  if (_colorBy === 'template') {
+    const tpl = getTemplate(p.templateId);
+    if (tpl) {
+      // Hash the template id to a stable palette entry.
+      let h = 0;
+      for (let i = 0; i < tpl.id.length; i++) h = (h * 31 + tpl.id.charCodeAt(i)) | 0;
+      const palette = ['#19446C','#00929F','#809848','#C4A230','#C05234','#6E5B8B','#4A7A9C'];
+      return palette[Math.abs(h) % palette.length];
+    }
+    return projectColor(p.id);
+  }
+  if (_colorBy === 'value') {
+    const v = p.contractValue || 0;
+    if (v >= 25e6) return '#19446C';
+    if (v >= 10e6) return '#00929F';
+    if (v >= 3e6)  return '#809848';
+    if (v >= 1e6)  return '#C4A230';
+    return '#C05234';
+  }
+  // default: winprob
+  const wp = p.winProbability != null ? p.winProbability : 100;
+  return winProbColor(wp);
+}
+
+function showMarkerTip(e, p) {
+  const tip = $('#tooltip');
+  if (!tip) return;
+  const wp = p.winProbability != null ? p.winProbability : 100;
+  const tpl = getTemplate(p.templateId);
+  const loc = getLocation(p.locationId);
+  tip.innerHTML = `
+    <div style="font-weight:700;margin-bottom:4px">${escapeHtml(p.name)}</div>
+    <div style="font-size:11px;color:#C8D1D6;margin-bottom:4px">${escapeHtml(p.client || '')}${p.location ? ' · ' + escapeHtml(p.location) : ''}</div>
+    <div style="font-size:11px">${tpl ? escapeHtml(tpl.name) : ''} ${loc ? '· ' + escapeHtml(loc.name) : ''}</div>
+    <div style="font-family:var(--font-mono);font-size:12px;margin-top:4px">${fmtMoney(p.contractValue||0, {compact:true})}</div>
+    <div style="font-size:11px;color:${winProbColor(wp)};margin-top:2px">${escapeHtml(winProbStageLabel(wp))}</div>
+  `;
+  tip.style.display = 'block';
+  moveTip(e);
+}
+
+function moveTip(e) {
+  const tip = $('#tooltip');
+  if (!tip) return;
+  tip.style.left = (e.pageX + 14) + 'px';
+  tip.style.top  = (e.pageY + 14) + 'px';
+}
+
+function renderLegend() {
+  const leg = $('#map-legend');
+  if (!leg) return;
+  if (_colorBy === 'winprob') {
+    leg.innerHTML = [
+      ['#6E8C34', '≥85% · awarded/booked'],
+      ['#00929F', '50–84% · verbal / LOI'],
+      ['#C4A230', '25–49% · qualified / proposal'],
+      ['#C05234', '< 25% · early lead / cold'],
+    ].map(([c, l]) =>
+      `<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`
+    ).join('') + `<div class="legend-item" style="margin-left:14px;color:var(--gray)">– marker size ∝ √(contract value)</div>`;
+  } else if (_colorBy === 'value') {
+    leg.innerHTML = [
+      ['#19446C', '≥ $25M'],
+      ['#00929F', '$10–25M'],
+      ['#809848', '$3–10M'],
+      ['#C4A230', '$1–3M'],
+      ['#C05234', '< $1M'],
+    ].map(([c, l]) =>
+      `<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`
+    ).join('');
+  } else {
+    // template — pull live from state.templates
+    leg.innerHTML = state.templates.map(t => {
+      let h = 0;
+      for (let i = 0; i < t.id.length; i++) h = (h * 31 + t.id.charCodeAt(i)) | 0;
+      const palette = ['#19446C','#00929F','#809848','#C4A230','#C05234','#6E5B8B','#4A7A9C'];
+      const c = palette[Math.abs(h) % palette.length];
+      return `<div class="legend-item"><span class="legend-swatch" style="background:${c}"></span>${escapeHtml(t.name)}</div>`;
+    }).join('');
+  }
+}
+
+
 /* ===== src/boot.js ===== */
 /* ============================================================
    TSI RESOURCE BURDEN PLANNER · v2
    Single-file HTML app. State persisted to localStorage.
    ============================================================ */
+
 
 
 
@@ -6241,6 +6688,7 @@ $$('.tab').forEach(tab => {
     $('#view-'+v).classList.add('active');
     if (v === 'dashboard') renderDashboard();
     if (v === 'projects')  renderProjects();
+    if (v === 'map')       renderMap();
     if (v === 'capacity')  renderCapacity();
     if (v === 'gantt')     renderGantt();
     if (v === 'histogram') renderHistogram();
@@ -6290,6 +6738,12 @@ $('#file-import').addEventListener('change', (e) => {
         }
         if (p.pinned == null) p.pinned = false;
         if (p.winProbability == null) p.winProbability = 100;
+        if (p.lat == null || p.lng == null) {
+          const loc = state.locations.find(l => l.id === p.locationId);
+          const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
+          const src = (loc && loc.lat != null) ? loc : def;
+          if (src) { p.lat = src.lat; p.lng = src.lng; }
+        }
       }
       saveState();
       renderAll();
@@ -6378,6 +6832,7 @@ function renderAll() {
   if (!activeTab) return;
   const v = activeTab.dataset.view;
   if (v === 'dashboard') renderDashboard();
+  if (v === 'map')       renderMap();
   if (v === 'capacity')  renderCapacity();
   if (v === 'gantt')     renderGantt();
   if (v === 'histogram') renderHistogram();

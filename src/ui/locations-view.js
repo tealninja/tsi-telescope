@@ -13,8 +13,10 @@ export function renderLocations() {
   list.innerHTML = `
     <table class="phase-table" style="width:100%">
       <thead><tr>
-        <th style="width:240px">Location</th>
-        <th style="width:120px">Multiplier</th>
+        <th style="width:200px">Location</th>
+        <th style="width:90px">Multiplier</th>
+        <th style="width:90px">Lat</th>
+        <th style="width:90px">Lng</th>
         <th>Notes</th>
         <th style="width:80px"></th>
       </tr></thead>
@@ -25,6 +27,8 @@ export function renderLocations() {
             <td>
               <input type="number" data-lf="multiplier" step="0.05" min="0.1" max="3.0" value="${l.multiplier}" class="mono" style="font-weight:600;color:var(--teal);text-align:center">
             </td>
+            <td><input type="number" data-lf="lat" step="0.01" min="-90"  max="90"  value="${l.lat != null ? l.lat : ''}" class="mono" style="text-align:right"></td>
+            <td><input type="number" data-lf="lng" step="0.01" min="-180" max="180" value="${l.lng != null ? l.lng : ''}" class="mono" style="text-align:right"></td>
             <td><input type="text" data-lf="notes" value="${escapeHtml(l.notes||'')}"></td>
             <td style="text-align:center"><button class="btn danger small" data-ldel="${l.id}">Del</button></td>
           </tr>
@@ -52,6 +56,9 @@ export function renderLocations() {
         const v = Math.max(0.1, Math.min(3.0, parseFloat(inp.value || '1')));
         loc.multiplier = v;
         inp.value = v;
+      } else if (field === 'lat' || field === 'lng') {
+        const v = parseFloat(inp.value);
+        loc[field] = Number.isFinite(v) ? v : null;
       } else {
         loc[field] = inp.value;
       }

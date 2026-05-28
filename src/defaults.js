@@ -32,11 +32,11 @@ export const DEFAULT_PHASES = [
 ];
 
 export const DEFAULT_LOCATIONS = [
-  { id: 'us',     name: 'USA / North America', multiplier: 1.00, notes: 'Baseline. Standard procurement lead times, OSHA compliance, in-house QA travel.' },
-  { id: 'vn_sea', name: 'Vietnam / SE Asia',   multiplier: 0.70, notes: 'Faster execution. Lower-cost local fab, parallel labor, shorter customs clearance. Use Austwood/local partners.' },
-  { id: 'eu',     name: 'Europe (EU)',         multiplier: 1.10, notes: 'CE marking, machinery directive overhead, ATEX where applicable. Engineering similar to US, regulatory adds ~10%.' },
-  { id: 'uk',     name: 'United Kingdom',      multiplier: 1.20, notes: 'Slower procurement post-Brexit, UKCA compliance. Engineering similar to US.' },
-  { id: 'br_sa',  name: 'Brazil / South America', multiplier: 1.15, notes: 'INMETRO certification, longer customs, currency hedging in commercial phase.' }
+  { id: 'us',     name: 'USA / North America', multiplier: 1.00, lat:  39.83, lng:  -98.58, notes: 'Baseline. Standard procurement lead times, OSHA compliance, in-house QA travel.' },
+  { id: 'vn_sea', name: 'Vietnam / SE Asia',   multiplier: 0.70, lat:  16.05, lng:  108.20, notes: 'Faster execution. Lower-cost local fab, parallel labor, shorter customs clearance. Use Austwood/local partners.' },
+  { id: 'eu',     name: 'Europe (EU)',         multiplier: 1.10, lat:  51.16, lng:   10.45, notes: 'CE marking, machinery directive overhead, ATEX where applicable. Engineering similar to US, regulatory adds ~10%.' },
+  { id: 'uk',     name: 'United Kingdom',      multiplier: 1.20, lat:  54.00, lng:   -2.00, notes: 'Slower procurement post-Brexit, UKCA compliance. Engineering similar to US.' },
+  { id: 'br_sa',  name: 'Brazil / South America', multiplier: 1.15, lat: -10.00, lng: -55.00, notes: 'INMETRO certification, longer customs, currency hedging in commercial phase.' }
 ];
 
 export function defaultLoading(peak, rampUp, rampDown) {

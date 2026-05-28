@@ -732,6 +732,45 @@
   }
 
   /* ================================================================
+     MAP / GLOBE
+     ================================================================ */
+  .map-wrap {
+    width: 100%;
+    height: 640px;
+    background: var(--warm-white);
+    position: relative;
+    overflow: hidden;
+  }
+  .map-wrap svg { width: 100%; height: 100%; display: block; cursor: grab; }
+  .map-wrap svg.dragging { cursor: grabbing; }
+  .map-sphere     { fill: #DCE6EA; }
+  .map-graticule  { fill: none; stroke: #C8D1D6; stroke-width: 0.5; }
+  .map-land       { fill: #F4EFE5; stroke: #C8C2B0; stroke-width: 0.5; }
+  .map-marker     { stroke: #FAF8F4; stroke-width: 1.5; cursor: pointer; transition: stroke-width 120ms; }
+  .map-marker:hover { stroke-width: 3; }
+  .map-marker.pinned { stroke: var(--deep-slate); stroke-width: 2; }
+  .map-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--ink-strong);
+    pointer-events: none;
+    paint-order: stroke fill;
+    stroke: var(--bg-canvas);
+    stroke-width: 3;
+    stroke-linejoin: round;
+  }
+  .map-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray);
+    font-size: 12px;
+    pointer-events: none;
+  }
+
+  /* ================================================================
      TOOLTIP
      ================================================================ */
   .tooltip {

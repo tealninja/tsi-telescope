@@ -154,6 +154,15 @@ function buildProjectForm(p) {
       </div>
     </div>
     <div class="field-row">
+      <div class="field"><label>Latitude</label>
+        <input type="number" id="pf-lat" step="0.0001" min="-90" max="90" value="${p.lat != null ? p.lat : ''}" class="mono" placeholder="e.g. 47.6588">
+        <div class="helper">Decimal degrees. Defaults to the location's centroid; override for a precise site.</div>
+      </div>
+      <div class="field"><label>Longitude</label>
+        <input type="number" id="pf-lng" step="0.0001" min="-180" max="180" value="${p.lng != null ? p.lng : ''}" class="mono" placeholder="e.g. -117.4260">
+      </div>
+    </div>
+    <div class="field-row">
       <div class="field" style="flex:2"><label>Win Probability (Pipeline Stage)</label>
         <div style="display:flex;gap:10px;align-items:center">
           <input type="range" id="pf-winprob" min="0" max="100" step="5" value="${p.winProbability != null ? p.winProbability : 100}" style="flex:1">
@@ -347,6 +356,19 @@ function wireProjectForm(p) {
   const locSel = $('#pf-loc-id');
   locSel.addEventListener('change', () => {
     p.locationId = locSel.value;
+    // Auto-fill lat/lng with the new location's centroid if the user
+    // hasn't typed anything specific. Useful when picking a country
+    // from the dropdown — markers land in roughly the right place.
+    const newLoc = getLocation(p.locationId);
+    if (newLoc && newLoc.lat != null && newLoc.lng != null) {
+      const latInp = $('#pf-lat'), lngInp = $('#pf-lng');
+      if (latInp && (latInp.value === '' || confirm('Move project pin to ' + newLoc.name + ' centroid?'))) {
+        latInp.value = newLoc.lat;
+        lngInp.value = newLoc.lng;
+        p.lat = newLoc.lat;
+        p.lng = newLoc.lng;
+      }
+    }
     updateEffDurs(p);
   });
 
@@ -595,5 +617,9 @@ function readProjectForm(p) {
   p.locationId = $('#pf-loc-id').value;
   p.startMonth = $('#pf-start').value;
   p.notes = $('#pf-notes').value;
+  const lat = parseFloat($('#pf-lat').value);
+  const lng = parseFloat($('#pf-lng').value);
+  p.lat = Number.isFinite(lat) ? lat : null;
+  p.lng = Number.isFinite(lng) ? lng : null;
   return p;
 }
