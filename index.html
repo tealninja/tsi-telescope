@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TSI Resource Burden Planner</title>
+<title>the Telescope · TSI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,9 +14,32 @@
 <body>
 
 <header class="masthead">
-  <div>
-    <div class="masthead-title">Resource <span class="accent">Burden</span> Planner</div>
-    <div class="masthead-sub">Teal Sales Inc. · Engineering Capacity Forecast · 36-Month Rolling</div>
+  <div class="masthead-brand">
+    <svg class="masthead-icon" viewBox="0 0 64 64" aria-hidden="true">
+      <!-- telescope: tripod legs + barrel angled up at the sky, with a tiny star -->
+      <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="50" x2="14" y2="60" />
+        <line x1="30" y1="50" x2="30" y2="60" />
+        <line x1="22" y1="50" x2="34" y2="60" />
+        <line x1="22" y1="50" x2="30" y2="50" />
+        <line x1="26" y1="50" x2="26" y2="42" />
+      </g>
+      <!-- barrel -->
+      <g transform="rotate(-32 32 32)">
+        <rect x="14" y="28" width="36" height="9" rx="2" fill="currentColor" />
+        <rect x="46" y="26" width="6" height="13" rx="1" fill="currentColor" opacity="0.85" />
+        <circle cx="17" cy="32.5" r="2" fill="var(--deep-blue)" />
+      </g>
+      <!-- star -->
+      <g fill="currentColor" opacity="0.9">
+        <circle cx="54" cy="10" r="1.6" />
+        <path d="M54 6 L54.8 9.2 L58 10 L54.8 10.8 L54 14 L53.2 10.8 L50 10 L53.2 9.2 Z" opacity="0.7" />
+      </g>
+    </svg>
+    <div>
+      <div class="masthead-title">the <span class="accent">Telescope</span></div>
+      <div class="masthead-sub">Teal Sales Inc. · Engineering Capacity Forecast · 36-Month Rolling</div>
+    </div>
   </div>
   <div class="masthead-actions">
     <button class="btn" id="btn-export">Export JSON</button>

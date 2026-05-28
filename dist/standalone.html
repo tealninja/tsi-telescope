@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TSI Resource Burden Planner</title>
+<title>the Telescope · TSI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -86,6 +86,17 @@
     top: 0;
     z-index: 50;
     border-bottom: 3px solid var(--teal);
+  }
+  .masthead-brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .masthead-icon {
+    width: 44px;
+    height: 44px;
+    color: var(--teal-dark);
+    flex-shrink: 0;
   }
   .masthead-title {
     font-family: var(--font-display);
@@ -742,6 +753,119 @@
   }
 
   /* ================================================================
+     DETAILED SCHEDULE GRID
+     ================================================================ */
+  .ds-wrap {
+    margin-top: 16px;
+    padding: 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+  .ds-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .ds-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    background: var(--bg-canvas);
+  }
+  .ds-table {
+    border-collapse: collapse;
+    font-family: var(--font-body);
+    font-size: 11px;
+    width: 100%;
+  }
+  .ds-table th, .ds-table td {
+    border: 1px solid var(--rule-soft);
+    padding: 0;
+    text-align: center;
+  }
+  .ds-table .ds-role-head, .ds-table .ds-row-total-head {
+    background: var(--deep-blue);
+    color: var(--warm-white);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    padding: 6px 10px;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+  .ds-table .ds-row-total-head { right: 0; left: auto; }
+  .ds-table .ds-phase-head {
+    color: var(--warm-white);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+  .ds-table .ds-month-head {
+    background: var(--warm-white);
+    color: var(--charcoal);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 10px;
+    padding: 3px 0;
+    min-width: 32px;
+  }
+  .ds-table .ds-role-name {
+    background: var(--bg-panel);
+    color: var(--ink-strong);
+    text-align: left;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  .ds-table .ds-cell { padding: 0; }
+  .ds-table .ds-input {
+    width: 100%;
+    min-width: 36px;
+    border: 0;
+    background: transparent;
+    padding: 4px 2px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--ink-strong);
+    outline: none;
+    -moz-appearance: textfield;
+  }
+  .ds-table .ds-input::-webkit-outer-spin-button,
+  .ds-table .ds-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .ds-table .ds-input:focus { background: var(--dried-wood); color: var(--deep-blue); }
+  .ds-table .ds-phase-divider { border-left: 2px solid var(--deep-blue) !important; }
+  .ds-table .ds-row-total {
+    background: var(--bg-panel);
+    color: var(--teal);
+    font-weight: 700;
+    padding: 4px 10px;
+    position: sticky;
+    right: 0;
+    z-index: 1;
+  }
+  .ds-table .ds-col-total {
+    background: var(--warm-white);
+    color: var(--ink-strong);
+    font-weight: 600;
+    padding: 4px 2px;
+    font-size: 10px;
+  }
+
+  /* ================================================================
      MAP / GLOBE
      ================================================================ */
   .map-wrap {
@@ -913,9 +1037,32 @@
 <body>
 
 <header class="masthead">
-  <div>
-    <div class="masthead-title">Resource <span class="accent">Burden</span> Planner</div>
-    <div class="masthead-sub">Teal Sales Inc. · Engineering Capacity Forecast · 36-Month Rolling</div>
+  <div class="masthead-brand">
+    <svg class="masthead-icon" viewBox="0 0 64 64" aria-hidden="true">
+      <!-- telescope: tripod legs + barrel angled up at the sky, with a tiny star -->
+      <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="50" x2="14" y2="60" />
+        <line x1="30" y1="50" x2="30" y2="60" />
+        <line x1="22" y1="50" x2="34" y2="60" />
+        <line x1="22" y1="50" x2="30" y2="50" />
+        <line x1="26" y1="50" x2="26" y2="42" />
+      </g>
+      <!-- barrel -->
+      <g transform="rotate(-32 32 32)">
+        <rect x="14" y="28" width="36" height="9" rx="2" fill="currentColor" />
+        <rect x="46" y="26" width="6" height="13" rx="1" fill="currentColor" opacity="0.85" />
+        <circle cx="17" cy="32.5" r="2" fill="var(--deep-blue)" />
+      </g>
+      <!-- star -->
+      <g fill="currentColor" opacity="0.9">
+        <circle cx="54" cy="10" r="1.6" />
+        <path d="M54 6 L54.8 9.2 L58 10 L54.8 10.8 L54 14 L53.2 10.8 L50 10 L53.2 9.2 Z" opacity="0.7" />
+      </g>
+    </svg>
+    <div>
+      <div class="masthead-title">the <span class="accent">Telescope</span></div>
+      <div class="masthead-sub">Teal Sales Inc. · Engineering Capacity Forecast · 36-Month Rolling</div>
+    </div>
   </div>
   <div class="masthead-actions">
     <button class="btn" id="btn-export">Export JSON</button>
@@ -2243,6 +2390,30 @@ function effectivePhaseDurations(project) {
   });
 }
 
+/* Nearest-neighbor resampler used when a detailed FTE array is held in
+   BASE-month units but needs to be applied over EFFECTIVE-month units
+   (location multiplier ≠ 1). Step values are preserved exactly rather
+   than smoothed — user-entered per-month allocations are piecewise
+   stepwise data, not a continuous signal. */
+function resampleArray(arr, newLen) {
+  const N1 = arr.length;
+  if (N1 === newLen) return arr.slice();
+  if (newLen <= 0) return [];
+  if (N1 === 0) return new Array(newLen).fill(0);
+  const out = new Array(newLen);
+  for (let i = 0; i < newLen; i++) {
+    const idx = Math.min(N1 - 1, Math.floor(i * N1 / newLen));
+    out[i] = arr[idx];
+  }
+  return out;
+}
+
+/* Total BASE-month duration (sum of phase.duration before location scaling).
+   Used as the length of detailedLoading arrays. */
+function totalBaseDuration(target) {
+  return target.phases.reduce((a, ph) => a + (ph.duration || 0), 0);
+}
+
 function computeAllDemand() {
   const demand = {};
   for (const r of state.roles) demand[r.id] = new Array(36).fill(0);
@@ -2253,31 +2424,71 @@ function computeAllDemand() {
     for (const r of state.roles) projectDemand[proj.id][r.id] = new Array(36).fill(0);
 
     const effDurs = effectivePhaseDurations(proj);
-    let cursor = proj.startMonth;
-    proj.phases.forEach((ph, phIdx) => {
-      const N = effDurs[phIdx];
+    const effTotal = effDurs.reduce((a,b) => a + b, 0);
+    const useDetailed = proj.loadingMode === 'detailed' && proj.detailedLoading;
+
+    if (useDetailed && effTotal > 0) {
+      // Detailed path: each role's BASE-length array is resampled onto
+      // EFFECTIVE-length, then applied directly to the demand grid.
+      const startIdx = monthsBetween(state.startMonth, proj.startMonth);
       for (const r of state.roles) {
-        const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-        // Ramp months also scale with location: scaled durations need scaled ramps proportionally.
-        const origDur = ph.duration || 1;
-        const rampUpScaled = N > 0 ? Math.round(ld.rampUp * (N / origDur)) : 0;
-        const rampDownScaled = N > 0 ? Math.round(ld.rampDown * (N / origDur)) : 0;
-        const curve = computeLoadCurve(N, ld.peak, rampUpScaled, rampDownScaled);
-        for (let k = 0; k < N; k++) {
-          const mKey = addMonths(cursor, k);
-          const mIdx = monthsBetween(state.startMonth, mKey);
+        const baseArr = proj.detailedLoading[r.id];
+        if (!Array.isArray(baseArr) || baseArr.length === 0) continue;
+        const arr = resampleArray(baseArr, effTotal);
+        for (let k = 0; k < arr.length; k++) {
+          const mIdx = startIdx + k;
           if (mIdx >= 0 && mIdx < 36) {
-            const fte = curve[k] / 100;
-            demand[r.id][mIdx] += fte;
-            projectDemand[proj.id][r.id][mIdx] += fte;
+            demand[r.id][mIdx] += arr[k];
+            projectDemand[proj.id][r.id][mIdx] += arr[k];
           }
         }
       }
-      cursor = addMonths(cursor, N);
-    });
+    } else {
+      // Simple path: peak / rampUp / rampDown per phase per role.
+      let cursor = proj.startMonth;
+      proj.phases.forEach((ph, phIdx) => {
+        const N = effDurs[phIdx];
+        for (const r of state.roles) {
+          const ld = ph.loading[r.id] || defaultLoading(0,0,0);
+          const origDur = ph.duration || 1;
+          const rampUpScaled = N > 0 ? Math.round(ld.rampUp * (N / origDur)) : 0;
+          const rampDownScaled = N > 0 ? Math.round(ld.rampDown * (N / origDur)) : 0;
+          const curve = computeLoadCurve(N, ld.peak, rampUpScaled, rampDownScaled);
+          for (let k = 0; k < N; k++) {
+            const mKey = addMonths(cursor, k);
+            const mIdx = monthsBetween(state.startMonth, mKey);
+            if (mIdx >= 0 && mIdx < 36) {
+              const fte = curve[k] / 100;
+              demand[r.id][mIdx] += fte;
+              projectDemand[proj.id][r.id][mIdx] += fte;
+            }
+          }
+        }
+        cursor = addMonths(cursor, N);
+      });
+    }
   }
 
   return { demand, projectDemand };
+}
+
+/* Build a base-month FTE array per role from a target's phase-based
+   simple curves. Used to seed the detailed-mode editor when the user
+   first switches a project or template from simple to detailed. */
+function detailedFromSimple(target) {
+  const out = {};
+  for (const r of state.roles) {
+    out[r.id] = [];
+    for (const ph of target.phases) {
+      const ld = ph.loading[r.id] || defaultLoading(0,0,0);
+      const N = ph.duration || 0;
+      const curve = computeLoadCurve(N, ld.peak, ld.rampUp, ld.rampDown);
+      // curve is in percent of an FTE; the demand grid divides by 100.
+      // For the editor (FTE units), pre-divide.
+      for (const v of curve) out[r.id].push(v / 100);
+    }
+  }
+  return out;
 }
 
 function totalEffectiveDuration(p) {
@@ -2297,6 +2508,253 @@ function projectStackOrder() {
 }
 
 
+/* ===== src/ui/detailed-schedule.js ===== */
+/* ============================================================
+   Detailed monthly schedule editor — shared between the project
+   and template editors.
+
+   Renders a role × base-month grid (capacity-builder style). Each
+   cell is an FTE value (decimal, e.g. 0.5 = half a person, 1.0 =
+   one full FTE for that month). Phase column blocks are colored
+   by phase, with month-number headers and a phase-name strip.
+
+   `target` is either a project or a template (deep-copied working
+   copy held by the modal). It must have:
+     – phases:        [{ phaseId, duration, loading }]
+     – loadingMode:   'simple' | 'detailed'
+     – detailedLoading: { roleId: number[] }  (length = sum of durations)
+
+   The caller wires up a mode toggle and is responsible for calling
+   buildDetailedScheduleSection() + wireDetailedSchedule() on render
+   and for resizing detailedLoading arrays when phase durations
+   change (helper resizeDetailedToPhases() handles that).
+   ============================================================ */
+
+
+
+/* HTML for the detailed grid. The caller pastes this into the modal.
+   Empty/zero cells stay blank so users can see at a glance where the
+   allocation actually is. */
+function buildDetailedScheduleSection(target, prefix) {
+  const totalM = totalBaseDuration(target);
+  ensureDetailedLoading(target);
+
+  let phaseHeader = '';
+  let monthHeader = '';
+  let cursor = 0;
+  for (const ph of target.phases) {
+    const phMeta = getPhase(ph.phaseId);
+    const color = phMeta ? phMeta.color : '#888';
+    const name  = phMeta ? phMeta.name  : ph.phaseId;
+    const dur = ph.duration || 0;
+    if (dur <= 0) continue;
+    phaseHeader += `<th colspan="${dur}" class="ds-phase-head" style="background:${color}">${escapeHtml(name)} · ${dur}mo</th>`;
+    for (let k = 0; k < dur; k++) {
+      monthHeader += `<th class="ds-month-head${k === 0 && cursor > 0 ? ' ds-phase-divider' : ''}">${cursor + k + 1}</th>`;
+    }
+    cursor += dur;
+  }
+
+  let bodyHTML = '';
+  for (const r of state.roles) {
+    const arr = target.detailedLoading[r.id] || new Array(totalM).fill(0);
+    let cells = '';
+    let col = 0;
+    for (const ph of target.phases) {
+      const dur = ph.duration || 0;
+      const phMeta = getPhase(ph.phaseId);
+      const bg = phMeta ? phMeta.color + '14' : '#88888814';  // 8% alpha as hex pair
+      for (let k = 0; k < dur; k++) {
+        const v = arr[col] != null ? arr[col] : 0;
+        const isDivider = k === 0 && col > 0;
+        const showVal = v !== 0 ? formatCell(v) : '';
+        cells += `<td class="ds-cell${isDivider ? ' ds-phase-divider' : ''}" style="background:${bg}"><input type="number" min="0" step="0.1" class="ds-input" data-role="${r.id}" data-col="${col}" value="${showVal}" inputmode="decimal" placeholder=""></td>`;
+        col++;
+      }
+    }
+    // Row-total cell (sum of FTE-months for this role across the project)
+    const total = arr.reduce((a,b)=>a + (Number(b)||0), 0);
+    bodyHTML += `
+      <tr>
+        <td class="ds-role-name" style="border-left:3px solid ${r.color}">${escapeHtml(r.name)}</td>
+        ${cells}
+        <td class="ds-row-total mono">${total.toFixed(1)}</td>
+      </tr>`;
+  }
+
+  // Column totals (per-month FTE across all roles)
+  let totalsRow = '<tr><td class="ds-role-name" style="color:var(--gray);text-transform:uppercase;letter-spacing:0.08em;font-size:10px;font-weight:700">Per-Month Total</td>';
+  for (let col = 0; col < totalM; col++) {
+    let sum = 0;
+    for (const r of state.roles) {
+      const a = target.detailedLoading[r.id];
+      if (a && a[col] != null) sum += Number(a[col]) || 0;
+    }
+    totalsRow += `<td class="ds-col-total mono" data-col="${col}">${sum !== 0 ? sum.toFixed(1) : ''}</td>`;
+  }
+  const grandTotal = state.roles.reduce((s, r) => {
+    const a = target.detailedLoading[r.id] || [];
+    return s + a.reduce((aa, v) => aa + (Number(v) || 0), 0);
+  }, 0);
+  totalsRow += `<td class="ds-row-total mono" style="background:var(--warm-white)">${grandTotal.toFixed(1)}</td></tr>`;
+
+  return `
+    <div class="ds-wrap">
+      <div class="ds-toolbar">
+        <div class="eyebrow" style="margin:0">Detailed Monthly Allocation · FTE per Role per Base Month</div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:var(--gray)">
+          <button class="btn ghost small" id="${prefix}-ds-regen">Regenerate from Simple Curves</button>
+          <button class="btn ghost small" id="${prefix}-ds-clear">Clear All</button>
+          <span>tab/arrow to move · empty = 0</span>
+        </div>
+      </div>
+      <div class="ds-table-wrap">
+        <table class="ds-table">
+          <thead>
+            <tr><th class="ds-role-head" rowspan="2">Role</th>${phaseHeader}<th class="ds-row-total-head" rowspan="2">FTE-mo</th></tr>
+            <tr>${monthHeader}</tr>
+          </thead>
+          <tbody>
+            ${bodyHTML}
+            ${totalsRow}
+          </tbody>
+        </table>
+      </div>
+      <div class="helper" style="margin-top:8px">
+        Decimal FTE per month. 0.5 = half a person. Location speed multipliers resample this curve onto the effective duration at compute time, so values stay anchored to base months.
+      </div>
+    </div>`;
+}
+
+function wireDetailedSchedule(target, prefix, onChange) {
+  const wrap = document.querySelector('.ds-wrap');
+  if (!wrap) return;
+
+  ensureDetailedLoading(target);
+
+  wrap.querySelectorAll('.ds-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const r = inp.dataset.role;
+      const col = parseInt(inp.dataset.col, 10);
+      const raw = inp.value.trim();
+      const v = raw === '' ? 0 : Math.max(0, parseFloat(raw) || 0);
+      if (!target.detailedLoading[r]) target.detailedLoading[r] = new Array(totalBaseDuration(target)).fill(0);
+      target.detailedLoading[r][col] = v;
+      refreshTotals(target, wrap);
+      if (onChange) onChange();
+    });
+    inp.addEventListener('keydown', (e) => {
+      // Arrow keys move focus between cells (like a spreadsheet).
+      const key = e.key;
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return;
+      e.preventDefault();
+      const r = inp.dataset.role;
+      const col = parseInt(inp.dataset.col, 10);
+      const roleIdx = state.roles.findIndex(x => x.id === r);
+      const totalM = totalBaseDuration(target);
+      let nr = roleIdx, nc = col;
+      if (key === 'ArrowUp') nr = Math.max(0, nr - 1);
+      if (key === 'ArrowDown') nr = Math.min(state.roles.length - 1, nr + 1);
+      if (key === 'ArrowLeft') nc = Math.max(0, nc - 1);
+      if (key === 'ArrowRight') nc = Math.min(totalM - 1, nc + 1);
+      const next = wrap.querySelector(`.ds-input[data-role="${state.roles[nr].id}"][data-col="${nc}"]`);
+      if (next) { next.focus(); next.select(); }
+    });
+  });
+
+  const regen = document.getElementById(`${prefix}-ds-regen`);
+  if (regen) regen.addEventListener('click', () => {
+    if (!confirm('Regenerate detailed allocation from the simple per-phase curves? Any manual edits in detailed mode will be overwritten.')) return;
+    target.detailedLoading = detailedFromSimple(target);
+    if (onChange) onChange();
+  });
+  const clear = document.getElementById(`${prefix}-ds-clear`);
+  if (clear) clear.addEventListener('click', () => {
+    if (!confirm('Clear every cell to zero?')) return;
+    target.detailedLoading = {};
+    ensureDetailedLoading(target);
+    if (onChange) onChange();
+  });
+}
+
+/* When phase durations change while in detailed mode, resize each role's
+   array to match the new total. The caller decides whether to call this
+   directly or to first ask the user. Strategy: per-phase block resize via
+   nearest-neighbor resampling. Preserves the SHAPE of each phase's curve. */
+function resizeDetailedToPhases(target, oldPhaseDurs) {
+  if (!target.detailedLoading) return;
+  const newDurs = target.phases.map(p => p.duration || 0);
+  const oldTotal = oldPhaseDurs.reduce((a,b)=>a+b, 0);
+  const newTotal = newDurs.reduce((a,b)=>a+b, 0);
+  if (oldTotal === newTotal) return;  // no resize needed at the total level
+
+  for (const r of state.roles) {
+    const oldArr = target.detailedLoading[r.id] || new Array(oldTotal).fill(0);
+    const newArr = [];
+    // Walk the OLD array per-phase and resample each block to the new
+    // block size. Assumes phases haven't been reordered (just resized).
+    let oldCursor = 0;
+    for (let i = 0; i < newDurs.length; i++) {
+      const oldDur = oldPhaseDurs[i] || 0;
+      const newDur = newDurs[i] || 0;
+      const block = oldArr.slice(oldCursor, oldCursor + oldDur);
+      const resized = resampleArray(block, newDur);
+      for (const v of resized) newArr.push(v);
+      oldCursor += oldDur;
+    }
+    target.detailedLoading[r.id] = newArr;
+  }
+}
+
+function ensureDetailedLoading(target) {
+  if (!target.detailedLoading) target.detailedLoading = {};
+  const N = totalBaseDuration(target);
+  for (const r of state.roles) {
+    const a = target.detailedLoading[r.id];
+    if (!Array.isArray(a)) {
+      target.detailedLoading[r.id] = new Array(N).fill(0);
+    } else if (a.length !== N) {
+      // Trim or pad to match phase totals; preserves leading values.
+      if (a.length > N) target.detailedLoading[r.id] = a.slice(0, N);
+      else target.detailedLoading[r.id] = a.concat(new Array(N - a.length).fill(0));
+    }
+  }
+}
+
+function refreshTotals(target, wrap) {
+  const totalM = totalBaseDuration(target);
+  // Per-row totals
+  wrap.querySelectorAll('tr').forEach(tr => {
+    const roleCell = tr.querySelector('.ds-role-name');
+    if (!roleCell) return;
+    const total = tr.querySelector('.ds-row-total');
+    if (!total) return;
+    let sum = 0;
+    tr.querySelectorAll('.ds-input').forEach(inp => {
+      sum += Number(inp.value) || 0;
+    });
+    total.textContent = sum.toFixed(1);
+  });
+  // Per-column totals
+  for (let col = 0; col < totalM; col++) {
+    let sum = 0;
+    for (const r of state.roles) {
+      const a = target.detailedLoading[r.id];
+      if (a && a[col] != null) sum += Number(a[col]) || 0;
+    }
+    const cell = wrap.querySelector(`.ds-col-total[data-col="${col}"]`);
+    if (cell) cell.textContent = sum !== 0 ? sum.toFixed(1) : '';
+  }
+}
+
+function formatCell(v) {
+  if (v === 0) return '';
+  // Drop trailing zeros: 1.0 → 1, 0.5 → 0.5, 0.25 → 0.25
+  if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+  return String(Number(v.toFixed(2)));
+}
+
+
 /* ===== src/ui/project-editor.js ===== */
 /* ============================================================
    Project editor modal — open/close, form builder (basics +
@@ -2308,6 +2766,7 @@ function projectStackOrder() {
    pulls scalar fields back into that copy on save. The save
    handler in openProjectModal commits it to state.projects.
    ============================================================ */
+
 
 
 
@@ -2401,7 +2860,7 @@ function buildProjectForm(p) {
         <td><input type="number" min="0" step="1" class="ph-duration" value="${ph.duration}"></td>
         <td><span class="eff-dur mono" style="color:var(--teal);font-weight:600">${effDur}</span></td>
         <td>
-          <details>
+          <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
             <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
             <div class="role-load-grid">
               <div class="head">Role</div>
@@ -2475,8 +2934,15 @@ function buildProjectForm(p) {
     <div class="section-label" style="margin-top:20px">Commercial · Contract &amp; Billing</div>
     ${buildBillingSection(p)}
 
-    <div class="section-label" style="margin-top:20px">Phases · Role Loading Curves</div>
+    <div class="section-label" style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <span>Phases · Role Loading</span>
+      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+        <button type="button" class="btn ghost small pf-mode-btn${(p.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
+        <button type="button" class="btn ghost small pf-mode-btn${p.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
+      </div>
+    </div>
     <div id="pf-phases">${phasesHTML}</div>
+    <div id="pf-detailed">${(p.loadingMode==='detailed') ? buildDetailedScheduleSection(p, 'pf') : ''}</div>
   `;
 }
 
@@ -2669,6 +3135,39 @@ function wireProjectForm(p) {
   wireProjectFormPhases(p);
   wireBillingForm(p);
   wireWinProbForm(p);
+  wireScheduleModeToggle(p);
+  if ((p.loadingMode || 'simple') === 'detailed') {
+    wireDetailedSchedule(p, 'pf');
+  }
+}
+
+function wireScheduleModeToggle(p) {
+  $('#modal-project-body').querySelectorAll('.pf-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newMode = btn.dataset.mode;
+      const curMode = p.loadingMode || 'simple';
+      if (newMode === curMode) return;
+      if (newMode === 'detailed') {
+        // Seed the detailed array from current phase curves if empty
+        if (!p.detailedLoading || Object.keys(p.detailedLoading).length === 0) {
+          p.detailedLoading = detailedFromSimple(p);
+        }
+        p.loadingMode = 'detailed';
+      } else {
+        // Switching back to simple — confirm before discarding
+        const hasData = p.detailedLoading && Object.values(p.detailedLoading)
+          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
+        if (hasData && !confirm('Switch back to simple curves? The detailed per-month allocation will be kept on the side but ignored at compute time. Switching back to Detailed later restores it.')) {
+          return;
+        }
+        p.loadingMode = 'simple';
+      }
+      // Re-render the modal body to reflect mode
+      const body = $('#modal-project-body');
+      body.innerHTML = buildProjectForm(p);
+      wireProjectForm(p);
+    });
+  });
 }
 
 function wireWinProbForm(p) {
@@ -3066,6 +3565,8 @@ function renderKPIs() {
 
 
 
+
+
 function renderTemplates() {
   const list = $('#template-list');
   list.innerHTML = state.templates.map(t => {
@@ -3175,9 +3676,15 @@ function openTemplateModal(tplId) {
   currentTplId = tplId;
   const t = deepCopy(getTemplate(tplId));
   $('#modal-template-title').textContent = 'Edit Template: ' + t.name;
-  const body = $('#modal-template-body');
+  renderTemplateModalBody(t);
+  $('#modal-template').classList.add('open');
+}
 
-  // Phase options for adding new phases
+/* Render the modal body from the in-memory working copy. Used both
+   on initial open and after the mode toggle, so detailed edits are
+   preserved across mode switches. */
+function renderTemplateModalBody(t) {
+  const body = $('#modal-template-body');
   const phaseOpts = state.phases.map(ph =>
     `<option value="${ph.id}">${escapeHtml(ph.name)}</option>`
   ).join('');
@@ -3200,7 +3707,13 @@ function openTemplateModal(tplId) {
     </div>
     <div class="field"><label>Description</label><textarea id="tf-description" rows="2">${escapeHtml(t.description||'')}</textarea></div>
 
-    <div class="section-label" style="margin-top:18px">Phases · Default Role Loading</div>
+    <div class="section-label" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <span>Phases · Default Role Loading</span>
+      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+        <button type="button" class="btn ghost small tf-mode-btn${(t.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
+        <button type="button" class="btn ghost small tf-mode-btn${t.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
+      </div>
+    </div>
     ${phasesHTML}
 
     <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
@@ -3208,11 +3721,32 @@ function openTemplateModal(tplId) {
       <input type="number" id="tf-add-phase-dur" min="1" value="2" placeholder="months" style="width:80px;flex:0 0 80px">
       <button class="btn ghost small" id="tf-add-phase">+ Add Phase</button>
     </div>
+
+    <div id="tf-detailed">${t.loadingMode === 'detailed' ? buildDetailedScheduleSection(t, 'tf') : ''}</div>
   `;
 
-  $('#modal-template').classList.add('open');
-
   wireTemplateModal(t);
+  if (t.loadingMode === 'detailed') wireDetailedSchedule(t, 'tf');
+  body.querySelectorAll('.tf-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newMode = btn.dataset.mode;
+      const curMode = t.loadingMode || 'simple';
+      if (newMode === curMode) return;
+      if (newMode === 'detailed') {
+        if (!t.detailedLoading || Object.keys(t.detailedLoading).length === 0) {
+          t.detailedLoading = detailedFromSimple(t);
+        }
+        t.loadingMode = 'detailed';
+      } else {
+        const hasData = t.detailedLoading && Object.values(t.detailedLoading)
+          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
+        if (hasData && !confirm('Switch back to simple curves? The detailed allocation is kept in the template but ignored at compute time.')) return;
+        t.loadingMode = 'simple';
+      }
+      // Re-render the body from the in-memory `t` so detailed edits survive.
+      renderTemplateModalBody(t);
+    });
+  });
 
   $('#modal-template-save').onclick = () => {
     t.name = $('#tf-name').value;
@@ -3236,7 +3770,7 @@ function renderTemplatePhaseRow(t, ph, idx) {
       </td>
       <td><input type="number" min="0" step="1" class="t-duration" value="${ph.duration}"></td>
       <td>
-        <details>
+        <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
           <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
           <div class="role-load-grid">
             <div class="head">Role</div>

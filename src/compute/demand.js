@@ -46,6 +46,30 @@ export function effectivePhaseDurations(project) {
   });
 }
 
+/* Nearest-neighbor resampler used when a detailed FTE array is held in
+   BASE-month units but needs to be applied over EFFECTIVE-month units
+   (location multiplier ≠ 1). Step values are preserved exactly rather
+   than smoothed — user-entered per-month allocations are piecewise
+   stepwise data, not a continuous signal. */
+export function resampleArray(arr, newLen) {
+  const N1 = arr.length;
+  if (N1 === newLen) return arr.slice();
+  if (newLen <= 0) return [];
+  if (N1 === 0) return new Array(newLen).fill(0);
+  const out = new Array(newLen);
+  for (let i = 0; i < newLen; i++) {
+    const idx = Math.min(N1 - 1, Math.floor(i * N1 / newLen));
+    out[i] = arr[idx];
+  }
+  return out;
+}
+
+/* Total BASE-month duration (sum of phase.duration before location scaling).
+   Used as the length of detailedLoading arrays. */
+export function totalBaseDuration(target) {
+  return target.phases.reduce((a, ph) => a + (ph.duration || 0), 0);
+}
+
 export function computeAllDemand() {
   const demand = {};
   for (const r of state.roles) demand[r.id] = new Array(36).fill(0);
@@ -56,31 +80,71 @@ export function computeAllDemand() {
     for (const r of state.roles) projectDemand[proj.id][r.id] = new Array(36).fill(0);
 
     const effDurs = effectivePhaseDurations(proj);
-    let cursor = proj.startMonth;
-    proj.phases.forEach((ph, phIdx) => {
-      const N = effDurs[phIdx];
+    const effTotal = effDurs.reduce((a,b) => a + b, 0);
+    const useDetailed = proj.loadingMode === 'detailed' && proj.detailedLoading;
+
+    if (useDetailed && effTotal > 0) {
+      // Detailed path: each role's BASE-length array is resampled onto
+      // EFFECTIVE-length, then applied directly to the demand grid.
+      const startIdx = monthsBetween(state.startMonth, proj.startMonth);
       for (const r of state.roles) {
-        const ld = ph.loading[r.id] || defaultLoading(0,0,0);
-        // Ramp months also scale with location: scaled durations need scaled ramps proportionally.
-        const origDur = ph.duration || 1;
-        const rampUpScaled = N > 0 ? Math.round(ld.rampUp * (N / origDur)) : 0;
-        const rampDownScaled = N > 0 ? Math.round(ld.rampDown * (N / origDur)) : 0;
-        const curve = computeLoadCurve(N, ld.peak, rampUpScaled, rampDownScaled);
-        for (let k = 0; k < N; k++) {
-          const mKey = addMonths(cursor, k);
-          const mIdx = monthsBetween(state.startMonth, mKey);
+        const baseArr = proj.detailedLoading[r.id];
+        if (!Array.isArray(baseArr) || baseArr.length === 0) continue;
+        const arr = resampleArray(baseArr, effTotal);
+        for (let k = 0; k < arr.length; k++) {
+          const mIdx = startIdx + k;
           if (mIdx >= 0 && mIdx < 36) {
-            const fte = curve[k] / 100;
-            demand[r.id][mIdx] += fte;
-            projectDemand[proj.id][r.id][mIdx] += fte;
+            demand[r.id][mIdx] += arr[k];
+            projectDemand[proj.id][r.id][mIdx] += arr[k];
           }
         }
       }
-      cursor = addMonths(cursor, N);
-    });
+    } else {
+      // Simple path: peak / rampUp / rampDown per phase per role.
+      let cursor = proj.startMonth;
+      proj.phases.forEach((ph, phIdx) => {
+        const N = effDurs[phIdx];
+        for (const r of state.roles) {
+          const ld = ph.loading[r.id] || defaultLoading(0,0,0);
+          const origDur = ph.duration || 1;
+          const rampUpScaled = N > 0 ? Math.round(ld.rampUp * (N / origDur)) : 0;
+          const rampDownScaled = N > 0 ? Math.round(ld.rampDown * (N / origDur)) : 0;
+          const curve = computeLoadCurve(N, ld.peak, rampUpScaled, rampDownScaled);
+          for (let k = 0; k < N; k++) {
+            const mKey = addMonths(cursor, k);
+            const mIdx = monthsBetween(state.startMonth, mKey);
+            if (mIdx >= 0 && mIdx < 36) {
+              const fte = curve[k] / 100;
+              demand[r.id][mIdx] += fte;
+              projectDemand[proj.id][r.id][mIdx] += fte;
+            }
+          }
+        }
+        cursor = addMonths(cursor, N);
+      });
+    }
   }
 
   return { demand, projectDemand };
+}
+
+/* Build a base-month FTE array per role from a target's phase-based
+   simple curves. Used to seed the detailed-mode editor when the user
+   first switches a project or template from simple to detailed. */
+export function detailedFromSimple(target) {
+  const out = {};
+  for (const r of state.roles) {
+    out[r.id] = [];
+    for (const ph of target.phases) {
+      const ld = ph.loading[r.id] || defaultLoading(0,0,0);
+      const N = ph.duration || 0;
+      const curve = computeLoadCurve(N, ld.peak, ld.rampUp, ld.rampDown);
+      // curve is in percent of an FTE; the demand grid divides by 100.
+      // For the editor (FTE units), pre-divide.
+      for (const v of curve) out[r.id].push(v / 100);
+    }
+  }
+  return out;
 }
 
 export function totalEffectiveDuration(p) {

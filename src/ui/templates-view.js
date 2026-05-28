@@ -9,6 +9,10 @@ import { escapeHtml } from '../util/format.js';
 import { deepCopy, uid } from '../util/clone.js';
 import { state, getPhase, getTemplate, saveState } from '../state.js';
 import { buildLoad, defaultLoading } from '../defaults.js';
+import { detailedFromSimple } from '../compute/demand.js';
+import {
+  buildDetailedScheduleSection, wireDetailedSchedule
+} from './detailed-schedule.js';
 
 export function renderTemplates() {
   const list = $('#template-list');
@@ -119,9 +123,15 @@ function openTemplateModal(tplId) {
   currentTplId = tplId;
   const t = deepCopy(getTemplate(tplId));
   $('#modal-template-title').textContent = 'Edit Template: ' + t.name;
-  const body = $('#modal-template-body');
+  renderTemplateModalBody(t);
+  $('#modal-template').classList.add('open');
+}
 
-  // Phase options for adding new phases
+/* Render the modal body from the in-memory working copy. Used both
+   on initial open and after the mode toggle, so detailed edits are
+   preserved across mode switches. */
+function renderTemplateModalBody(t) {
+  const body = $('#modal-template-body');
   const phaseOpts = state.phases.map(ph =>
     `<option value="${ph.id}">${escapeHtml(ph.name)}</option>`
   ).join('');
@@ -144,7 +154,13 @@ function openTemplateModal(tplId) {
     </div>
     <div class="field"><label>Description</label><textarea id="tf-description" rows="2">${escapeHtml(t.description||'')}</textarea></div>
 
-    <div class="section-label" style="margin-top:18px">Phases · Default Role Loading</div>
+    <div class="section-label" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <span>Phases · Default Role Loading</span>
+      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+        <button type="button" class="btn ghost small tf-mode-btn${(t.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
+        <button type="button" class="btn ghost small tf-mode-btn${t.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
+      </div>
+    </div>
     ${phasesHTML}
 
     <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
@@ -152,11 +168,32 @@ function openTemplateModal(tplId) {
       <input type="number" id="tf-add-phase-dur" min="1" value="2" placeholder="months" style="width:80px;flex:0 0 80px">
       <button class="btn ghost small" id="tf-add-phase">+ Add Phase</button>
     </div>
+
+    <div id="tf-detailed">${t.loadingMode === 'detailed' ? buildDetailedScheduleSection(t, 'tf') : ''}</div>
   `;
 
-  $('#modal-template').classList.add('open');
-
   wireTemplateModal(t);
+  if (t.loadingMode === 'detailed') wireDetailedSchedule(t, 'tf');
+  body.querySelectorAll('.tf-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newMode = btn.dataset.mode;
+      const curMode = t.loadingMode || 'simple';
+      if (newMode === curMode) return;
+      if (newMode === 'detailed') {
+        if (!t.detailedLoading || Object.keys(t.detailedLoading).length === 0) {
+          t.detailedLoading = detailedFromSimple(t);
+        }
+        t.loadingMode = 'detailed';
+      } else {
+        const hasData = t.detailedLoading && Object.values(t.detailedLoading)
+          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
+        if (hasData && !confirm('Switch back to simple curves? The detailed allocation is kept in the template but ignored at compute time.')) return;
+        t.loadingMode = 'simple';
+      }
+      // Re-render the body from the in-memory `t` so detailed edits survive.
+      renderTemplateModalBody(t);
+    });
+  });
 
   $('#modal-template-save').onclick = () => {
     t.name = $('#tf-name').value;
@@ -180,7 +217,7 @@ function renderTemplatePhaseRow(t, ph, idx) {
       </td>
       <td><input type="number" min="0" step="1" class="t-duration" value="${ph.duration}"></td>
       <td>
-        <details>
+        <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
           <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
           <div class="role-load-grid">
             <div class="head">Role</div>

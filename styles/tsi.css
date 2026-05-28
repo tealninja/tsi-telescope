@@ -77,6 +77,17 @@
     z-index: 50;
     border-bottom: 3px solid var(--teal);
   }
+  .masthead-brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .masthead-icon {
+    width: 44px;
+    height: 44px;
+    color: var(--teal-dark);
+    flex-shrink: 0;
+  }
   .masthead-title {
     font-family: var(--font-display);
     font-weight: 400;
@@ -729,6 +740,119 @@
     padding: 18px 14px;
     color: var(--succ-green);
     font-size: 13px;
+  }
+
+  /* ================================================================
+     DETAILED SCHEDULE GRID
+     ================================================================ */
+  .ds-wrap {
+    margin-top: 16px;
+    padding: 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+  .ds-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .ds-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    background: var(--bg-canvas);
+  }
+  .ds-table {
+    border-collapse: collapse;
+    font-family: var(--font-body);
+    font-size: 11px;
+    width: 100%;
+  }
+  .ds-table th, .ds-table td {
+    border: 1px solid var(--rule-soft);
+    padding: 0;
+    text-align: center;
+  }
+  .ds-table .ds-role-head, .ds-table .ds-row-total-head {
+    background: var(--deep-blue);
+    color: var(--warm-white);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    padding: 6px 10px;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+  .ds-table .ds-row-total-head { right: 0; left: auto; }
+  .ds-table .ds-phase-head {
+    color: var(--warm-white);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+  .ds-table .ds-month-head {
+    background: var(--warm-white);
+    color: var(--charcoal);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 10px;
+    padding: 3px 0;
+    min-width: 32px;
+  }
+  .ds-table .ds-role-name {
+    background: var(--bg-panel);
+    color: var(--ink-strong);
+    text-align: left;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  .ds-table .ds-cell { padding: 0; }
+  .ds-table .ds-input {
+    width: 100%;
+    min-width: 36px;
+    border: 0;
+    background: transparent;
+    padding: 4px 2px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--ink-strong);
+    outline: none;
+    -moz-appearance: textfield;
+  }
+  .ds-table .ds-input::-webkit-outer-spin-button,
+  .ds-table .ds-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .ds-table .ds-input:focus { background: var(--dried-wood); color: var(--deep-blue); }
+  .ds-table .ds-phase-divider { border-left: 2px solid var(--deep-blue) !important; }
+  .ds-table .ds-row-total {
+    background: var(--bg-panel);
+    color: var(--teal);
+    font-weight: 700;
+    padding: 4px 10px;
+    position: sticky;
+    right: 0;
+    z-index: 1;
+  }
+  .ds-table .ds-col-total {
+    background: var(--warm-white);
+    color: var(--ink-strong);
+    font-weight: 600;
+    padding: 4px 2px;
+    font-size: 10px;
   }
 
   /* ================================================================

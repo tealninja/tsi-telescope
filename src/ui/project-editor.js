@@ -9,14 +9,17 @@
    handler in openProjectModal commits it to state.projects.
    ============================================================ */
 
-import { $ } from '../util/dom.js';
+import { $, $$ } from '../util/dom.js';
 import { escapeHtml, fmtMoney, winProbStageLabel } from '../util/format.js';
 import { monthKey } from '../util/dates.js';
 import { deepCopy, deepCopyMilestones, uid } from '../util/clone.js';
 import {
   state, getPhase, getTemplate, getLocation, getProject, saveState
 } from '../state.js';
-import { totalEffectiveDuration } from '../compute/demand.js';
+import { totalEffectiveDuration, detailedFromSimple } from '../compute/demand.js';
+import {
+  buildDetailedScheduleSection, wireDetailedSchedule, resizeDetailedToPhases
+} from './detailed-schedule.js';
 import {
   DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED, defaultLoading
 } from '../defaults.js';
@@ -107,7 +110,7 @@ function buildProjectForm(p) {
         <td><input type="number" min="0" step="1" class="ph-duration" value="${ph.duration}"></td>
         <td><span class="eff-dur mono" style="color:var(--teal);font-weight:600">${effDur}</span></td>
         <td>
-          <details>
+          <details ${countActiveRoles(ph.loading) > 0 ? 'open' : ''}>
             <summary>Edit loading (${countActiveRoles(ph.loading)} roles active)</summary>
             <div class="role-load-grid">
               <div class="head">Role</div>
@@ -181,8 +184,15 @@ function buildProjectForm(p) {
     <div class="section-label" style="margin-top:20px">Commercial · Contract &amp; Billing</div>
     ${buildBillingSection(p)}
 
-    <div class="section-label" style="margin-top:20px">Phases · Role Loading Curves</div>
+    <div class="section-label" style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <span>Phases · Role Loading</span>
+      <div style="display:flex;gap:6px;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+        <button type="button" class="btn ghost small pf-mode-btn${(p.loadingMode||'simple')==='simple'?' active':''}" data-mode="simple" style="border-radius:0">Simple Curves</button>
+        <button type="button" class="btn ghost small pf-mode-btn${p.loadingMode==='detailed'?' active':''}" data-mode="detailed" style="border-radius:0">Detailed Monthly</button>
+      </div>
+    </div>
     <div id="pf-phases">${phasesHTML}</div>
+    <div id="pf-detailed">${(p.loadingMode==='detailed') ? buildDetailedScheduleSection(p, 'pf') : ''}</div>
   `;
 }
 
@@ -375,6 +385,39 @@ function wireProjectForm(p) {
   wireProjectFormPhases(p);
   wireBillingForm(p);
   wireWinProbForm(p);
+  wireScheduleModeToggle(p);
+  if ((p.loadingMode || 'simple') === 'detailed') {
+    wireDetailedSchedule(p, 'pf');
+  }
+}
+
+function wireScheduleModeToggle(p) {
+  $('#modal-project-body').querySelectorAll('.pf-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newMode = btn.dataset.mode;
+      const curMode = p.loadingMode || 'simple';
+      if (newMode === curMode) return;
+      if (newMode === 'detailed') {
+        // Seed the detailed array from current phase curves if empty
+        if (!p.detailedLoading || Object.keys(p.detailedLoading).length === 0) {
+          p.detailedLoading = detailedFromSimple(p);
+        }
+        p.loadingMode = 'detailed';
+      } else {
+        // Switching back to simple — confirm before discarding
+        const hasData = p.detailedLoading && Object.values(p.detailedLoading)
+          .some(arr => Array.isArray(arr) && arr.some(v => Number(v) > 0));
+        if (hasData && !confirm('Switch back to simple curves? The detailed per-month allocation will be kept on the side but ignored at compute time. Switching back to Detailed later restores it.')) {
+          return;
+        }
+        p.loadingMode = 'simple';
+      }
+      // Re-render the modal body to reflect mode
+      const body = $('#modal-project-body');
+      body.innerHTML = buildProjectForm(p);
+      wireProjectForm(p);
+    });
+  });
 }
 
 function wireWinProbForm(p) {

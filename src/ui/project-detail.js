@@ -8,7 +8,7 @@
    without rebuilding the modal shell.
    ============================================================ */
 
-import { $, hideTip } from '../util/dom.js';
+import { $, $$, hideTip } from '../util/dom.js';
 import { escapeHtml, fmtMoney, winProbColor, niceCeil } from '../util/format.js';
 import { monthKey, monthLabel, addMonths, monthsBetween, parseMonth } from '../util/dates.js';
 import {
