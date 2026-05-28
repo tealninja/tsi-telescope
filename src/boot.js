@@ -3,6 +3,8 @@
    Single-file HTML app. State persisted to localStorage.
    ============================================================ */
 
+import { monthKey, parseMonth, monthLabel, addMonths, monthsBetween } from './util/dates.js';
+
 const STORAGE_KEY = 'tsi_resource_planner_v6';
 
 /* ---------- Default data ---------- */
@@ -400,28 +402,6 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 function deepCopyMilestones(arr) { return arr.map(m => Object.assign({}, m)); }
 function uid(prefix) { return prefix + '_' + Math.random().toString(36).slice(2,9); }
 
-function monthKey(d) {
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-}
-function parseMonth(k) {
-  const [y,m] = k.split('-').map(Number);
-  return new Date(y, m-1, 1);
-}
-function monthLabel(k, short=true) {
-  const d = parseMonth(k);
-  const mNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return short ? `${mNames[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
-               : `${mNames[d.getMonth()]} ${d.getFullYear()}`;
-}
-function addMonths(k, n) {
-  const d = parseMonth(k);
-  d.setMonth(d.getMonth() + n);
-  return monthKey(d);
-}
-function monthsBetween(a, b) {
-  const da = parseMonth(a), db = parseMonth(b);
-  return (db.getFullYear()-da.getFullYear())*12 + (db.getMonth()-da.getMonth());
-}
 function horizonMonths() {
   const out = [];
   for (let i=0; i<36; i++) out.push(addMonths(state.startMonth, i));
