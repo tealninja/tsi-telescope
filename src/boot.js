@@ -5,6 +5,7 @@
 
 import { monthKey, parseMonth, monthLabel, addMonths, monthsBetween } from './util/dates.js';
 import { fmtMoney, winProbStageLabel, winProbColor, niceCeil, escapeHtml } from './util/format.js';
+import { $, $$, toast, hideTip } from './util/dom.js';
 
 const STORAGE_KEY = 'tsi_resource_planner_v6';
 
@@ -772,17 +773,6 @@ function seedSampleProjects() {
 /* ============================================================
    UI WIRING
    ============================================================ */
-
-const $ = sel => document.querySelector(sel);
-const $$ = sel => Array.from(document.querySelectorAll(sel));
-
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(()=> t.classList.remove('show'), 2400);
-}
 
 /* ---------- Tab switching ---------- */
 $$('.tab').forEach(tab => {
@@ -2116,7 +2106,6 @@ function showGanttTip(e, bar) {
   tip.style.left = (e.pageX + 14) + 'px';
   tip.style.top = (e.pageY + 14) + 'px';
 }
-function hideTip() { $('#tooltip').style.display = 'none'; }
 
 function renderGanttLegend() {
   const leg = $('#gantt-legend');
