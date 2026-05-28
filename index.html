@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TSI Resource Burden Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tsi.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+</head>
+<body>
+
+<header class="masthead">
+  <div>
+    <div class="masthead-title">Resource <span class="accent">Burden</span> Planner</div>
+    <div class="masthead-sub">Teal Sales Inc. · Engineering Capacity Forecast · 36-Month Rolling</div>
+  </div>
+  <div class="masthead-actions">
+    <button class="btn" id="btn-export">Export JSON</button>
+    <button class="btn" id="btn-import">Import JSON</button>
+    <input type="file" id="file-import" accept="application/json" style="display:none">
+    <button class="btn danger" id="btn-reset">Reset</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tab active" data-view="dashboard">Dashboard</div>
+  <div class="tab" data-view="projects">Projects</div>
+  <div class="tab" data-view="map">Map</div>
+  <div class="tab" data-view="capacity">Capacity</div>
+  <div class="tab" data-view="gantt">Gantt</div>
+  <div class="tab" data-view="histogram">Demand Histogram</div>
+  <div class="tab" data-view="capvdem">Capacity vs Demand</div>
+  <div class="tab" data-view="templates">Templates</div>
+  <div class="tab" data-view="locations">Locations</div>
+  <div class="tab" data-view="roles">Roles</div>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD VIEW -->
+  <section class="view active" id="view-dashboard">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Portfolio Snapshot · 36-Month Horizon</div>
+          <div class="panel-title">Dashboard</div>
+        </div>
+        <div style="font-size:11px;color:var(--gray)">
+          <span id="dash-asof"></span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="dash-grid" id="dash-financial"></div>
+        <div class="dash-grid" id="dash-resourcing" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="dash-risk-panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Diagnostic</div>
+          <div class="panel-title">Projects at Risk · within 3 months of an over-capacity period</div>
+        </div>
+      </div>
+      <div class="panel-body" id="dash-risk-body"></div>
+    </div>
+  </section>
+
+  <!-- PROJECTS VIEW -->
+  <section class="view" id="view-projects">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Portfolio</div>
+          <div class="panel-title">Active Projects</div>
+        </div>
+        <div>
+          <button class="btn primary small" id="btn-new-project">+ New Project</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="project-grid" id="project-grid"></div>
+      </div>
+    </div>
+
+    <div class="kpi-row" id="kpi-row"></div>
+  </section>
+
+  <!-- MAP VIEW -->
+  <section class="view" id="view-map">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Geography</div>
+          <div class="panel-title">Portfolio Map · Orthographic Globe</div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="margin:0">Color by</label>
+            <select id="map-color-by" style="width:auto;font-size:12px">
+              <option value="winprob" selected>Win probability</option>
+              <option value="template">Template</option>
+              <option value="value">Contract value</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer">
+            <input type="checkbox" id="map-graticule" checked style="width:auto;margin:0;cursor:pointer">
+            Graticule
+          </label>
+          <button class="btn ghost small" id="map-reset-view">Reset View</button>
+          <span>drag to rotate · scroll to zoom</span>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="map-wrap" id="map-wrap"></div>
+        <div class="legend" id="map-legend"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAPACITY VIEW -->
+  <section class="view" id="view-capacity">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Supply</div>
+          <div class="panel-title">Monthly Role Capacity · Headcount</div>
+        </div>
+        <div>
+          <button class="btn ghost small" id="btn-cap-fill">Fill Right →</button>
+          <button class="btn ghost small" id="btn-cap-zero">Zero All</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <p class="section-label">Set headcount per role per month. This becomes your supply ceiling for the Capacity vs Demand analysis.</p>
+        <div class="capacity-table-wrap">
+          <table class="capacity-table" id="capacity-table"></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GANTT VIEW -->
+  <section class="view" id="view-gantt">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Schedule</div>
+          <div class="panel-title">Phase Timeline · All Projects</div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="margin:0;font-size:10px">Zoom</label>
+            <select id="gantt-zoom" style="width:auto;font-size:12px">
+              <option value="40">Compact</option>
+              <option value="60" selected>Normal</option>
+              <option value="90">Wide</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:var(--gray)">
+            <span>Range:</span>
+            <input type="range" id="gantt-range-start" min="0" max="35" step="1" value="0" style="width:110px">
+            <input type="range" id="gantt-range-end" min="0" max="35" step="1" value="35" style="width:110px">
+            <button class="btn ghost small" id="gantt-range-reset">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="chart-wrap" id="gantt-wrap"></div>
+        <div class="legend" id="gantt-legend"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible Portfolio Resources panel -->
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-header" style="cursor:pointer">
+        <div id="gantt-resources-header" style="cursor:pointer;flex:1">
+          <div class="eyebrow">Companion · Below Schedule</div>
+          <div class="panel-title"><span id="gantt-resources-caret">▾</span> Portfolio Resources · <span id="gantt-resources-subtitle">stacked by project</span></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="hist-mode-group" id="gantt-resources-mode" style="display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+            <button class="hist-mode-btn active" data-mode="project">By Project</button>
+            <button class="hist-mode-btn" data-mode="role">By Role</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:11px;cursor:pointer">
+            <input type="checkbox" id="gantt-resources-weighted" style="width:auto;margin:0;cursor:pointer">
+            Apply win-prob weighting
+          </label>
+          <span style="font-size:11px;color:var(--gray)">click title to collapse</span>
+        </div>
+      </div>
+      <div class="panel-body flush" id="gantt-resources-body">
+        <div class="chart-wrap" id="gantt-resources-wrap"></div>
+        <div class="legend" id="gantt-resources-legend"></div>
+      </div>
+    </div>
+
+    <!-- Collapsible Portfolio Cashflow panel -->
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-header" style="cursor:pointer">
+        <div id="gantt-cashflow-header" style="cursor:pointer;flex:1">
+          <div class="eyebrow">Companion · Below Schedule</div>
+          <div class="panel-title"><span id="gantt-cashflow-caret">▾</span> Portfolio Cashflow · <span id="gantt-cashflow-subtitle">stacked by project</span></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="hist-mode-group" id="gantt-cashflow-mode" style="display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+            <button class="hist-mode-btn active" data-mode="project">By Project</button>
+            <button class="hist-mode-btn" data-mode="total">Total Net</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:11px;cursor:pointer">
+            <input type="checkbox" id="gantt-cashflow-weighted" style="width:auto;margin:0;cursor:pointer">
+            Apply win-prob weighting
+          </label>
+          <span style="font-size:11px;color:var(--gray)">click title to collapse</span>
+        </div>
+      </div>
+      <div class="panel-body flush" id="gantt-cashflow-body">
+        <div class="chart-wrap" id="gantt-cashflow-wrap"></div>
+        <div class="legend" id="gantt-cashflow-legend"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- HISTOGRAM VIEW -->
+  <section class="view" id="view-histogram">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Demand</div>
+          <div class="panel-title" id="hist-title">Stacked Histogram · FTE by Role</div>
+        </div>
+        <div class="hist-controls" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="hist-mode-group" style="display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden">
+            <button class="hist-mode-btn active" data-mode="role">Role</button>
+            <button class="hist-mode-btn" data-mode="project-bar">Project · Bars</button>
+            <button class="hist-mode-btn" data-mode="project-area">Project · Area</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:11px;cursor:pointer">
+            <input type="checkbox" id="hist-cap-toggle" checked style="width:auto;margin:0;cursor:pointer">
+            Capacity overlay
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:var(--gray)">
+            <span>Range:</span>
+            <input type="range" id="hist-range-start" min="0" max="35" step="1" value="0" style="width:100px">
+            <input type="range" id="hist-range-end" min="0" max="35" step="1" value="35" style="width:100px">
+            <button class="btn ghost small" id="hist-range-reset">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="chart-wrap" id="hist-wrap"></div>
+        <div class="legend" id="hist-legend"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="bottleneck-panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Diagnostic</div>
+          <div class="panel-title">Bottleneck Strip · Worst per-role ratio per month</div>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="chart-wrap" id="bottleneck-wrap"></div>
+        <div class="legend" id="bottleneck-legend"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAP VS DEM -->
+  <section class="view" id="view-capvdem">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Balance</div>
+          <div class="panel-title">Capacity vs Demand · Per Role</div>
+        </div>
+        <div>
+          <select id="cvd-role-select" style="width:auto;font-size:12px"></select>
+        </div>
+      </div>
+      <div class="panel-body flush">
+        <div class="chart-wrap" id="cvd-wrap"></div>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--deep-blue)"></span>Demand (FTE)</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--coral);border-style:dashed"></span>Capacity (Headcount)</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:rgba(192,82,52,0.25)"></span>Over-allocation</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Over-Allocation Summary</div>
+      </div>
+      <div class="panel-body">
+        <div id="over-table"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEMPLATES VIEW -->
+  <section class="view" id="view-templates">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Library</div>
+          <div class="panel-title">Project Templates</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn ghost small" id="btn-clone-template">Clone From…</button>
+          <button class="btn primary small" id="btn-new-template">+ New Template</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <p class="section-label">Templates define default phase durations and role loading curves. Edit defaults to reflect your standard project shapes. Location modifiers are applied at the project level.</p>
+        <div id="template-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCATIONS VIEW -->
+  <section class="view" id="view-locations">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Geography</div>
+          <div class="panel-title">Locations &amp; Speed Multipliers</div>
+        </div>
+        <div>
+          <button class="btn primary small" id="btn-new-location">+ New Location</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <p class="section-label">Each location applies a multiplier to phase durations. <strong style="color:var(--ink-strong)">USA / North America is the 1.0× baseline.</strong> Vietnam &amp; SE Asia tend to execute faster (~0.7×); UK procurement runs slower (~1.2×). Role loadings are unchanged — only duration.</p>
+        <div id="location-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROLES VIEW -->
+  <section class="view" id="view-roles">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Discipline</div>
+          <div class="panel-title">Tracked Roles</div>
+        </div>
+        <div>
+          <button class="btn primary small" id="btn-new-role">+ New Role</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <p class="section-label">Roles tracked across all projects and capacity. Adding a role appends it to every template's phase loading (default 0%).</p>
+        <div id="role-list"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Project edit modal -->
+<div class="modal-overlay" id="modal-project">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="panel-title" id="modal-project-title">Project</div>
+      <button class="btn small" id="modal-project-close">Close</button>
+    </div>
+    <div class="modal-body" id="modal-project-body"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" id="modal-project-cancel">Cancel</button>
+      <button class="btn primary" id="modal-project-save">Save Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- Template edit modal -->
+<div class="modal-overlay" id="modal-template">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="panel-title" id="modal-template-title">Template</div>
+      <button class="btn small" id="modal-template-close">Close</button>
+    </div>
+    <div class="modal-body" id="modal-template-body"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" id="modal-template-cancel">Cancel</button>
+      <button class="btn primary" id="modal-template-save">Save Template</button>
+    </div>
+  </div>
+</div>
+
+<!-- Clone template modal -->
+<div class="modal-overlay" id="modal-clone">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="panel-title">Clone Existing Template</div>
+      <button class="btn small" id="modal-clone-close">Close</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>New Template Name</label><input type="text" id="clone-name" placeholder="e.g. Dryer Mid-Size"></div>
+      <div class="field"><label>Clone From</label><select id="clone-source"></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn ghost" id="modal-clone-cancel">Cancel</button>
+      <button class="btn primary" id="modal-clone-do">Clone</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project detail modal (role breakdown for one project) -->
+<div class="modal-overlay" id="modal-project-detail">
+  <div class="modal" style="max-width:1000px">
+    <div class="modal-header">
+      <div class="panel-title" id="modal-project-detail-title">Project Detail</div>
+      <button class="btn small" id="modal-project-detail-close">Close</button>
+    </div>
+    <div class="modal-body" id="modal-project-detail-body"></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<div class="toast" id="toast"></div>
+<script type="module" src="src/boot.js"></script>
+</body>
+</html>
