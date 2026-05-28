@@ -25,6 +25,7 @@ import { renderTemplates } from './ui/templates-view.js';
 import { renderCapVDem } from './ui/capvdem-view.js';
 import { renderHistogram } from './ui/histogram-view.js';
 import { renderGantt } from './ui/gantt-view.js';
+import { renderDashboard } from './ui/dashboard-view.js';
 
 
 
@@ -40,6 +41,7 @@ $$('.tab').forEach(tab => {
     const v = tab.dataset.view;
     $$('.view').forEach(view => view.classList.remove('active'));
     $('#view-'+v).classList.add('active');
+    if (v === 'dashboard') renderDashboard();
     if (v === 'projects')  renderProjects();
     if (v === 'capacity')  renderCapacity();
     if (v === 'gantt')     renderGantt();
@@ -170,10 +172,14 @@ $('#btn-new-role').addEventListener('click', () => {
    active. Imported by view modules that mutate state (e.g. delete project,
    save edits) so the rest of the UI catches up. */
 export function renderAll() {
+  // Re-render projects (used for the card grid + KPI row) always, so any
+  // tab that toggles back to it sees fresh data. Then re-render whichever
+  // view is currently active so the user's screen catches up.
   renderProjects();
   const activeTab = document.querySelector('.tab.active');
   if (!activeTab) return;
   const v = activeTab.dataset.view;
+  if (v === 'dashboard') renderDashboard();
   if (v === 'capacity')  renderCapacity();
   if (v === 'gantt')     renderGantt();
   if (v === 'histogram') renderHistogram();

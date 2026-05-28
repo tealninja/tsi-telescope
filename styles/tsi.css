@@ -656,6 +656,82 @@
   }
 
   /* ================================================================
+     DASHBOARD CARDS
+     ================================================================ */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 1100px) { .dash-grid { grid-template-columns: repeat(2, 1fr); } }
+  .dash-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 18px 22px;
+    border-top: 3px solid var(--teal);
+    display: flex;
+    flex-direction: column;
+    min-height: 116px;
+  }
+  .dash-card.warn { border-top-color: var(--amber); }
+  .dash-card.bad  { border-top-color: var(--coral); }
+  .dash-card.ok   { border-top-color: var(--succ-green); }
+  .dash-card .dash-label {
+    font-family: var(--font-body);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--gray);
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .dash-card .dash-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 30px;
+    line-height: 1.05;
+    color: var(--ink-strong);
+    letter-spacing: -0.01em;
+  }
+  .dash-card .dash-value.warn { color: var(--amber); }
+  .dash-card .dash-value.bad  { color: var(--coral); }
+  .dash-card .dash-value.ok   { color: var(--succ-green); }
+  .dash-card .dash-value.teal { color: var(--teal); }
+  .dash-card .dash-sub {
+    font-size: 11px;
+    color: var(--gray);
+    margin-top: auto;
+    padding-top: 10px;
+  }
+  .dash-card .dash-sub strong { color: var(--ink); font-weight: 600; }
+
+  .dash-risk-row {
+    display: grid;
+    grid-template-columns: 1fr 220px 160px 140px;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 12px;
+  }
+  .dash-risk-row:last-child { border-bottom: none; }
+  .dash-risk-row .dash-risk-name {
+    color: var(--ink-strong);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .dash-risk-row .dash-risk-name:hover { color: var(--teal); }
+  .dash-risk-row .dash-risk-window { color: var(--gray); font-family: var(--font-mono); }
+  .dash-risk-row .dash-risk-driver { font-family: var(--font-mono); }
+  .dash-risk-row .dash-risk-month  { font-family: var(--font-mono); color: var(--coral); font-weight: 600; }
+  .dash-risk-empty {
+    padding: 18px 14px;
+    color: var(--succ-green);
+    font-size: 13px;
+  }
+
+  /* ================================================================
      TOOLTIP
      ================================================================ */
   .tooltip {

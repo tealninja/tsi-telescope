@@ -25,7 +25,8 @@
 </header>
 
 <nav class="tabs">
-  <div class="tab active" data-view="projects">Projects</div>
+  <div class="tab active" data-view="dashboard">Dashboard</div>
+  <div class="tab" data-view="projects">Projects</div>
   <div class="tab" data-view="capacity">Capacity</div>
   <div class="tab" data-view="gantt">Gantt</div>
   <div class="tab" data-view="histogram">Demand Histogram</div>
@@ -37,8 +38,37 @@
 
 <main>
 
+  <!-- DASHBOARD VIEW -->
+  <section class="view active" id="view-dashboard">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Portfolio Snapshot · 36-Month Horizon</div>
+          <div class="panel-title">Dashboard</div>
+        </div>
+        <div style="font-size:11px;color:var(--gray)">
+          <span id="dash-asof"></span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="dash-grid" id="dash-financial"></div>
+        <div class="dash-grid" id="dash-resourcing" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="dash-risk-panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">Diagnostic</div>
+          <div class="panel-title">Projects at Risk · within 3 months of an over-capacity period</div>
+        </div>
+      </div>
+      <div class="panel-body" id="dash-risk-body"></div>
+    </div>
+  </section>
+
   <!-- PROJECTS VIEW -->
-  <section class="view active" id="view-projects">
+  <section class="view" id="view-projects">
     <div class="panel">
       <div class="panel-header">
         <div>
