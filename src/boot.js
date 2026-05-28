@@ -3,39 +3,25 @@
    Single-file HTML app. State persisted to localStorage.
    ============================================================ */
 
-import { monthKey, parseMonth, monthLabel, addMonths, monthsBetween } from './util/dates.js';
-import { fmtMoney, winProbStageLabel, winProbColor, niceCeil, escapeHtml } from './util/format.js';
-import { $, $$, toast, hideTip } from './util/dom.js';
-import { PROJECT_COLOR_PALETTE, projectColor } from './util/palette.js';
+import { monthKey } from './util/dates.js';
+import { $, $$, toast } from './util/dom.js';
 import { deepCopy, deepCopyMilestones, uid } from './util/clone.js';
 import {
   DEFAULT_ROLES, DEFAULT_PHASES, DEFAULT_LOCATIONS, DEFAULT_TEMPLATES,
-  DEFAULT_MILESTONE_SCHED, FEED_MILESTONE_SCHED, RETROFIT_MILESTONE_SCHED,
-  DEFAULT_COST_SCHED, FEED_COST_SCHED, RETROFIT_COST_SCHED,
-  defaultLoading, buildLoad
+  DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED,
+  defaultLoading
 } from './defaults.js';
 import {
   state, setState, STORAGE_KEY,
-  horizonMonths, getPhase, getRole, getTemplate, getLocation, getProject,
+  getTemplate,
   saveState, loadState, seedSampleProjects
 } from './state.js';
-import {
-  computeLoadCurve, effectivePhaseDurations, computeAllDemand,
-  totalEffectiveDuration, projectStackOrder
-} from './compute/demand.js';
-import {
-  projectPhaseBoundaries, computeProjectCashflow, computePortfolioCashflow
-} from './compute/cashflow.js';
-import {
-  computeProjectConflicts, computeTotalSeries, computeBottleneckSeries
-} from './compute/conflicts.js';
 import { renderRoles } from './ui/roles-view.js';
 import { renderLocations } from './ui/locations-view.js';
 import { renderCapacity } from './ui/capacity-view.js';
 import { openProjectModal } from './ui/project-editor.js';
 import { renderProjects } from './ui/projects-view.js';
 import { renderTemplates } from './ui/templates-view.js';
-import { openProjectDetailModal } from './ui/project-detail.js';
 import { renderCapVDem } from './ui/capvdem-view.js';
 import { renderHistogram } from './ui/histogram-view.js';
 import { renderGantt } from './ui/gantt-view.js';
@@ -136,10 +122,7 @@ $('#btn-reset').addEventListener('click', () => {
 
 $('#btn-new-project').addEventListener('click', () => openProjectModal(null));
 
-/* ============================================================
-   CAPACITY VIEW
-   ============================================================ */
-
+/* ---------- Capacity view top-level buttons ---------- */
 $('#btn-cap-fill').addEventListener('click', () => {
   for (const r of state.roles) {
     const arr = state.capacity[r.id] || new Array(36).fill(0);
@@ -161,15 +144,7 @@ $('#btn-cap-zero').addEventListener('click', () => {
   saveState(); renderCapacity();
 });
 
-
-
-
-
-
-/* ============================================================
-   LOCATIONS VIEW
-   ============================================================ */
-
+/* ---------- Locations view top-level button ---------- */
 $('#btn-new-location').addEventListener('click', () => {
   const name = prompt('Location name?', 'New Location');
   if (!name) return;
@@ -179,10 +154,7 @@ $('#btn-new-location').addEventListener('click', () => {
   saveState(); renderLocations();
 });
 
-/* ============================================================
-   ROLES VIEW
-   ============================================================ */
-
+/* ---------- Roles view top-level button ---------- */
 $('#btn-new-role').addEventListener('click', () => {
   const name = prompt('Role name?');
   if (!name) return;
@@ -194,13 +166,11 @@ $('#btn-new-role').addEventListener('click', () => {
   saveState(); renderRoles();
 });
 
-/* ============================================================
-   HELPERS
-   ============================================================ */
-
+/* Re-renders the projects grid + KPIs, plus whichever view is currently
+   active. Imported by view modules that mutate state (e.g. delete project,
+   save edits) so the rest of the UI catches up. */
 export function renderAll() {
   renderProjects();
-  // Also re-render whichever view is currently active (Gantt, Histogram, etc.)
   const activeTab = document.querySelector('.tab.active');
   if (!activeTab) return;
   const v = activeTab.dataset.view;
