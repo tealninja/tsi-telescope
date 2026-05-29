@@ -1174,6 +1174,122 @@
     .masthead-actions .btn { padding: 5px 8px; font-size: 10px; }
   }
 
+  /* ================================================================
+     COMPRESS-TO-PAGE-WIDTH  —  fit-width toggle for wide tables.
+     Applied to .capacity-table-wrap and .ds-table-wrap. Cells shrink
+     to fit; inputs become small but stay tappable. Default ON on
+     viewports ≤800px (set in JS); manual toggle persists in
+     localStorage per table.
+     ================================================================ */
+
+  .capacity-table-wrap.fit-width { overflow-x: hidden; }
+  .capacity-table-wrap.fit-width .capacity-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+  }
+  .capacity-table-wrap.fit-width .capacity-table th,
+  .capacity-table-wrap.fit-width .capacity-table td {
+    padding: 2px 0;
+    font-size: 10px;
+    overflow: hidden;
+  }
+  .capacity-table-wrap.fit-width .capacity-table th.role-head {
+    min-width: 0;
+    width: 56px;
+  }
+  .capacity-table-wrap.fit-width .capacity-table .role-name {
+    position: static;
+    padding: 4px 6px;
+    font-size: 10px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+  .capacity-table-wrap.fit-width .capacity-table input {
+    width: 100%;
+    min-width: 0;
+    padding: 2px 1px;
+    font-size: 10px;
+    border: 0;
+    background: transparent;
+    text-align: center;
+    font-family: var(--font-mono);
+    color: var(--ink-strong);
+    -moz-appearance: textfield;
+  }
+  .capacity-table-wrap.fit-width .capacity-table input::-webkit-outer-spin-button,
+  .capacity-table-wrap.fit-width .capacity-table input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+
+  .ds-table-wrap.fit-width { overflow-x: hidden; }
+  .ds-table-wrap.fit-width .ds-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+  }
+  .ds-table-wrap.fit-width .ds-table th,
+  .ds-table-wrap.fit-width .ds-table td {
+    padding: 0;
+    overflow: hidden;
+  }
+  .ds-table-wrap.fit-width .ds-role-head,
+  .ds-table-wrap.fit-width .ds-row-total-head { width: 56px; min-width: 0; padding: 4px 6px; font-size: 9px; }
+  .ds-table-wrap.fit-width .ds-phase-head { font-size: 8px; padding: 2px 3px; }
+  .ds-table-wrap.fit-width .ds-month-head { font-size: 9px; padding: 2px 0; min-width: 0; }
+  .ds-table-wrap.fit-width .ds-role-name {
+    position: static;
+    padding: 3px 6px;
+    font-size: 10px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .ds-table-wrap.fit-width .ds-input {
+    font-size: 10px;
+    padding: 2px 0;
+    min-width: 0;
+  }
+  .ds-table-wrap.fit-width .ds-row-total,
+  .ds-table-wrap.fit-width .ds-col-total {
+    position: static;
+    padding: 3px 4px;
+    font-size: 10px;
+  }
+
+  /* ================================================================
+     EXTRA MOBILE TOUCHES
+     ================================================================ */
+
+  /* Range sliders get fatter thumbs on touch so the win-prob and
+     range-sliders are easier to grab. Webkit + Moz. */
+  @media (hover: none) and (pointer: coarse) {
+    input[type="range"]::-webkit-slider-thumb {
+      width: 22px !important;
+      height: 22px !important;
+      border-radius: 50% !important;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px !important;
+      height: 22px !important;
+      border-radius: 50% !important;
+    }
+    input[type="range"] { height: 28px; }
+  }
+
+  /* Phone-sized modal: big primary actions in the footer. */
+  @media (max-width: 540px) {
+    .modal-footer .btn {
+      flex: 1;
+      padding: 12px 14px;
+      font-size: 13px;
+      min-height: 44px;
+    }
+    /* Project cards: more vertical room + clear delete-button hit-area. */
+    .project-card { padding: 16px 16px; }
+    .project-card-actions .btn.small { padding: 6px 10px; font-size: 10px; }
+  }
+
 </style>
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
@@ -1318,6 +1434,7 @@
           <div class="panel-title">Monthly Role Capacity · Headcount</div>
         </div>
         <div>
+          <button class="btn ghost small" id="btn-cap-fit" title="Toggle compress-to-page-width layout">⇆ Fit Width</button>
           <button class="btn ghost small" id="btn-cap-fill">Fill Right →</button>
           <button class="btn ghost small" id="btn-cap-zero">Zero All</button>
         </div>
@@ -2580,6 +2697,33 @@ function renderLocations() {
 
 
 
+const FIT_KEY = 'tsi_cap_fit_width_v1';
+
+function capFitWidthDefault() {
+  // Default: ON for narrow viewports, OFF on desktop.
+  if (typeof window !== 'undefined' && window.innerWidth && window.innerWidth <= 800) return true;
+  return false;
+}
+
+function capFitWidth() {
+  try {
+    const v = localStorage.getItem(FIT_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch (_) {}
+  return capFitWidthDefault();
+}
+
+function setCapFitWidth(on) {
+  try { localStorage.setItem(FIT_KEY, on ? '1' : '0'); } catch (_) {}
+  applyCapFitWidthClass();
+}
+
+function applyCapFitWidthClass() {
+  const wrap = $('.capacity-table-wrap');
+  if (wrap) wrap.classList.toggle('fit-width', capFitWidth());
+}
+
 function renderCapacity() {
   const table = $('#capacity-table');
   const horizon = horizonMonths();
@@ -2639,6 +2783,8 @@ function renderCapacity() {
       saveState();
     });
   });
+
+  applyCapFitWidthClass();
 }
 
 
@@ -2665,6 +2811,21 @@ function renderCapacity() {
    ============================================================ */
 
 
+
+const FIT_KEY = 'tsi_ds_fit_width_v1';
+
+function dsFitWidth() {
+  try {
+    const v = localStorage.getItem(FIT_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch (_) {}
+  return (typeof window !== 'undefined' && window.innerWidth && window.innerWidth <= 800);
+}
+
+function setDsFitWidth(on) {
+  try { localStorage.setItem(FIT_KEY, on ? '1' : '0'); } catch (_) {}
+}
 
 /* HTML for the detailed grid. The caller pastes this into the modal.
    Empty/zero cells stay blank so users can see at a glance where the
@@ -2732,17 +2893,19 @@ function buildDetailedScheduleSection(target, prefix) {
   }, 0);
   totalsRow += `<td class="ds-row-total mono" style="background:var(--warm-white)">${grandTotal.toFixed(1)}</td></tr>`;
 
+  const fit = dsFitWidth();
   return `
     <div class="ds-wrap">
       <div class="ds-toolbar">
         <div class="eyebrow" style="margin:0">Detailed Monthly Allocation · FTE per Role per Base Month</div>
-        <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:var(--gray)">
-          <button class="btn ghost small" id="${prefix}-ds-regen">Regenerate from Simple Curves</button>
-          <button class="btn ghost small" id="${prefix}-ds-clear">Clear All</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
+          <button class="btn ghost small" id="${prefix}-ds-fit" title="Toggle compress-to-page-width layout">⇆ Fit Width</button>
+          <button class="btn ghost small" id="${prefix}-ds-regen">Regenerate</button>
+          <button class="btn ghost small" id="${prefix}-ds-clear">Clear</button>
           <span>tab/arrow to move · empty = 0</span>
         </div>
       </div>
-      <div class="ds-table-wrap">
+      <div class="ds-table-wrap${fit ? ' fit-width' : ''}">
         <table class="ds-table">
           <thead>
             <tr><th class="ds-role-head" rowspan="2">Role</th>${phaseHeader}<th class="ds-row-total-head" rowspan="2">FTE-mo</th></tr>
@@ -2796,6 +2959,14 @@ function wireDetailedSchedule(target, prefix, onChange) {
     });
   });
 
+  const fit = document.getElementById(`${prefix}-ds-fit`);
+  if (fit) fit.addEventListener('click', () => {
+    const wrap = document.querySelector('.ds-table-wrap');
+    if (!wrap) return;
+    const next = !wrap.classList.contains('fit-width');
+    setDsFitWidth(next);
+    wrap.classList.toggle('fit-width', next);
+  });
   const regen = document.getElementById(`${prefix}-ds-regen`);
   if (regen) regen.addEventListener('click', () => {
     if (!confirm('Regenerate detailed allocation from the simple per-phase curves? Any manual edits in detailed mode will be overwritten.')) return;
@@ -7414,6 +7585,10 @@ $('#btn-reset').addEventListener('click', () => {
 $('#btn-new-project').addEventListener('click', () => openProjectModal(null));
 
 /* ---------- Capacity view top-level buttons ---------- */
+$('#btn-cap-fit').addEventListener('click', () => {
+  setCapFitWidth(!capFitWidth());
+});
+
 $('#btn-cap-fill').addEventListener('click', () => {
   for (const r of state.roles) {
     const arr = state.capacity[r.id] || new Array(36).fill(0);

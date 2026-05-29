@@ -25,6 +25,21 @@ import {
   totalBaseDuration, detailedFromSimple, resampleArray
 } from '../compute/demand.js';
 
+const FIT_KEY = 'tsi_ds_fit_width_v1';
+
+export function dsFitWidth() {
+  try {
+    const v = localStorage.getItem(FIT_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch (_) {}
+  return (typeof window !== 'undefined' && window.innerWidth && window.innerWidth <= 800);
+}
+
+export function setDsFitWidth(on) {
+  try { localStorage.setItem(FIT_KEY, on ? '1' : '0'); } catch (_) {}
+}
+
 /* HTML for the detailed grid. The caller pastes this into the modal.
    Empty/zero cells stay blank so users can see at a glance where the
    allocation actually is. */
@@ -91,17 +106,19 @@ export function buildDetailedScheduleSection(target, prefix) {
   }, 0);
   totalsRow += `<td class="ds-row-total mono" style="background:var(--warm-white)">${grandTotal.toFixed(1)}</td></tr>`;
 
+  const fit = dsFitWidth();
   return `
     <div class="ds-wrap">
       <div class="ds-toolbar">
         <div class="eyebrow" style="margin:0">Detailed Monthly Allocation · FTE per Role per Base Month</div>
-        <div style="display:flex;gap:8px;align-items:center;font-size:11px;color:var(--gray)">
-          <button class="btn ghost small" id="${prefix}-ds-regen">Regenerate from Simple Curves</button>
-          <button class="btn ghost small" id="${prefix}-ds-clear">Clear All</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
+          <button class="btn ghost small" id="${prefix}-ds-fit" title="Toggle compress-to-page-width layout">⇆ Fit Width</button>
+          <button class="btn ghost small" id="${prefix}-ds-regen">Regenerate</button>
+          <button class="btn ghost small" id="${prefix}-ds-clear">Clear</button>
           <span>tab/arrow to move · empty = 0</span>
         </div>
       </div>
-      <div class="ds-table-wrap">
+      <div class="ds-table-wrap${fit ? ' fit-width' : ''}">
         <table class="ds-table">
           <thead>
             <tr><th class="ds-role-head" rowspan="2">Role</th>${phaseHeader}<th class="ds-row-total-head" rowspan="2">FTE-mo</th></tr>
@@ -155,6 +172,14 @@ export function wireDetailedSchedule(target, prefix, onChange) {
     });
   });
 
+  const fit = document.getElementById(`${prefix}-ds-fit`);
+  if (fit) fit.addEventListener('click', () => {
+    const wrap = document.querySelector('.ds-table-wrap');
+    if (!wrap) return;
+    const next = !wrap.classList.contains('fit-width');
+    setDsFitWidth(next);
+    wrap.classList.toggle('fit-width', next);
+  });
   const regen = document.getElementById(`${prefix}-ds-regen`);
   if (regen) regen.addEventListener('click', () => {
     if (!confirm('Regenerate detailed allocation from the simple per-phase curves? Any manual edits in detailed mode will be overwritten.')) return;

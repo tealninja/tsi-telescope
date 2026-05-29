@@ -10,6 +10,33 @@ import { escapeHtml } from '../util/format.js';
 import { parseMonth } from '../util/dates.js';
 import { state, horizonMonths, saveState } from '../state.js';
 
+const FIT_KEY = 'tsi_cap_fit_width_v1';
+
+function capFitWidthDefault() {
+  // Default: ON for narrow viewports, OFF on desktop.
+  if (typeof window !== 'undefined' && window.innerWidth && window.innerWidth <= 800) return true;
+  return false;
+}
+
+export function capFitWidth() {
+  try {
+    const v = localStorage.getItem(FIT_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch (_) {}
+  return capFitWidthDefault();
+}
+
+export function setCapFitWidth(on) {
+  try { localStorage.setItem(FIT_KEY, on ? '1' : '0'); } catch (_) {}
+  applyCapFitWidthClass();
+}
+
+function applyCapFitWidthClass() {
+  const wrap = $('.capacity-table-wrap');
+  if (wrap) wrap.classList.toggle('fit-width', capFitWidth());
+}
+
 export function renderCapacity() {
   const table = $('#capacity-table');
   const horizon = horizonMonths();
@@ -69,4 +96,6 @@ export function renderCapacity() {
       saveState();
     });
   });
+
+  applyCapFitWidthClass();
 }

@@ -19,7 +19,7 @@ import {
 import { migrateAllToDetailed } from './compute/demand.js';
 import { renderRoles } from './ui/roles-view.js';
 import { renderLocations } from './ui/locations-view.js';
-import { renderCapacity } from './ui/capacity-view.js';
+import { renderCapacity, capFitWidth, setCapFitWidth } from './ui/capacity-view.js';
 import { openProjectModal } from './ui/project-editor.js';
 import { renderProjects } from './ui/projects-view.js';
 import { renderTemplates } from './ui/templates-view.js';
@@ -134,6 +134,10 @@ $('#btn-reset').addEventListener('click', () => {
 $('#btn-new-project').addEventListener('click', () => openProjectModal(null));
 
 /* ---------- Capacity view top-level buttons ---------- */
+$('#btn-cap-fit').addEventListener('click', () => {
+  setCapFitWidth(!capFitWidth());
+});
+
 $('#btn-cap-fill').addEventListener('click', () => {
   for (const r of state.roles) {
     const arr = state.capacity[r.id] || new Array(36).fill(0);
