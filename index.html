@@ -42,6 +42,7 @@
     </div>
   </div>
   <div class="masthead-actions">
+    <button class="btn primary" id="btn-quick-add">⚡ Quick Add</button>
     <button class="btn" id="btn-export">Export JSON</button>
     <button class="btn" id="btn-import">Import JSON</button>
     <input type="file" id="file-import" accept="application/json" style="display:none">
@@ -441,6 +442,21 @@
       <button class="btn small" id="modal-project-detail-close">Close</button>
     </div>
     <div class="modal-body" id="modal-project-detail-body"></div>
+  </div>
+</div>
+
+<!-- Quick Add modal (fast path for adding existing booked work + pipeline) -->
+<div class="modal-overlay" id="modal-quick-add">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div class="panel-title">⚡ Quick Add Project</div>
+      <button class="btn small" id="modal-quick-add-close">Close</button>
+    </div>
+    <div class="modal-body" id="modal-quick-add-body"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" id="modal-quick-add-cancel">Cancel</button>
+      <button class="btn primary" id="modal-quick-add-save">Add Project</button>
+    </div>
   </div>
 </div>
 

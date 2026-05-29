@@ -6,6 +6,7 @@
 
 import { $ } from '../util/dom.js';
 import { escapeHtml, fmtMoney, winProbColor } from '../util/format.js';
+import { stageColor, stageLabel } from '../util/stages.js';
 import { addMonths, monthLabel } from '../util/dates.js';
 import { state, getTemplate, getLocation, horizonMonths, saveState, removeProject } from '../state.js';
 import { totalEffectiveDuration, computeAllDemand } from '../compute/demand.js';
@@ -30,11 +31,12 @@ export function renderProjects() {
         <button class="btn small danger" data-act="del" data-id="${p.id}">Del</button>
       </div>
       <div class="project-card-tags">
+        <span class="tag" style="background:${stageColor(p.stage || 'booked')};color:#fff;font-weight:700">${escapeHtml(stageLabel(p.stage || 'booked'))}</span>
         <span class="tag template">${tpl ? escapeHtml(tpl.name) : 'custom'}</span>
         ${loc ? `<span class="tag location">${escapeHtml(loc.name)}</span>` : ''}
         ${loc && loc.multiplier !== 1.0 ? `<span class="tag multiplier">${loc.multiplier.toFixed(2)}×</span>` : ''}
-        <span class="tag" style="background:${wpColor};color:#fff">${wp}% · ${wp >= 100 ? 'booked' : wp >= 85 ? 'awarded' : wp >= 65 ? 'LOI' : wp >= 40 ? 'proposal' : wp >= 20 ? 'qualified' : 'lead'}</span>
-        ${p.pinned ? '<span class="tag" style="background:var(--coral);color:#fff">🔒 locked</span>' : ''}
+        <span class="tag" style="background:${wpColor};color:#fff">${wp}%</span>
+        ${p.pinned ? '<span class="tag" style="background:var(--coral);color:#fff">🔒</span>' : ''}
       </div>
       <div class="project-card-name">${escapeHtml(p.name)}</div>
       <div class="project-card-meta">${escapeHtml(p.client || '—')} · ${escapeHtml(p.location || '')}</div>

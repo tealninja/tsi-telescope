@@ -45,22 +45,35 @@ export function renderDashboard() {
   $('#dash-asof').textContent =
     `${monthLabel(horizon[0], false)} → ${monthLabel(horizon[35], false)}`;
 
-  // ---- Financial roll-ups across the visible horizon ----
-  let totalRevenue = 0, totalCost = 0;
-  for (let i = 0; i < 36; i++) {
-    totalRevenue += cf.revenueRecognized[i];
-    totalCost    += cf.costOut[i];
-  }
-  // Risk-weighted revenue: scale each project's recognized revenue by win-prob.
-  let weightedRevenue = 0;
+  // ---- Financial roll-ups across the visible horizon, split by stage ----
+  let bookedRevenue = 0, pipelineUpside = 0, totalCost = 0;
   for (const p of state.projects) {
     const pcf = cf.perProject[p.id];
     if (!pcf) continue;
+    const stage = p.stage || 'booked';
     const wp = (p.winProbability != null ? p.winProbability : 100) / 100;
-    for (let i = 0; i < 36; i++) weightedRevenue += pcf.revenueRecognized[i] * wp;
+    let revSum = 0;
+    for (let i = 0; i < 36; i++) revSum += pcf.revenueRecognized[i];
+    if (stage === 'booked') bookedRevenue += revSum;
+    else if (stage === 'complete' || stage === 'cancelled') { /* drop */ }
+    else pipelineUpside += revSum * wp;
   }
+  for (let i = 0; i < 36; i++) totalCost += cf.costOut[i];
+  const totalRevenue = bookedRevenue + pipelineUpside;
   const grossMargin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
   const marginClass = grossMargin >= 20 ? 'ok' : grossMargin >= 10 ? 'warn' : 'bad';
+
+  // ---- Booked vs Pipeline FTE-months ----
+  let bookedFTEm = 0, pipelineFTEm = 0;
+  for (const p of state.projects) {
+    const stage = p.stage || 'booked';
+    if (stage === 'complete' || stage === 'cancelled') continue;
+    const pd = projectDemand[p.id];
+    let sum = 0;
+    for (const r of state.roles) for (let i = 0; i < 36; i++) sum += pd[r.id][i];
+    if (stage === 'booked') bookedFTEm += sum;
+    else pipelineFTEm += sum * ((p.winProbability != null ? p.winProbability : 100) / 100);
+  }
 
   // ---- Resourcing roll-ups ----
   let totalFTEm = 0, totalCap = 0;
@@ -134,25 +147,31 @@ export function renderDashboard() {
   atRiskProjects.sort((a,b) => a.overCapMonth - b.overCapMonth);
 
   // ---- Render cards ----
+  const bookedCount = state.projects.filter(p => (p.stage || 'booked') === 'booked').length;
+  const pipelineCount = state.projects.filter(p => {
+    const s = p.stage || 'booked';
+    return s !== 'booked' && s !== 'complete' && s !== 'cancelled';
+  }).length;
+
   $('#dash-financial').innerHTML = [
-    card('Total Revenue', fmtMoney(totalRevenue, {compact:true}),
-         'recognized · ' + state.projects.length + ' projects'),
-    card('Risk-Weighted Revenue', fmtMoney(weightedRevenue, {compact:true}),
-         '× win probability · expected value', 'teal'),
+    card('Booked Revenue', fmtMoney(bookedRevenue, {compact:true}),
+         `${bookedCount} signed project${bookedCount === 1 ? '' : 's'}`),
+    card('Pipeline Upside', fmtMoney(pipelineUpside, {compact:true}),
+         `${pipelineCount} weighted by win-prob`, 'teal'),
     card('Total Cost', fmtMoney(totalCost, {compact:true}),
          'cost-line outflows'),
     card('Gross Margin', grossMargin.toFixed(1) + '%',
-         'revenue − cost ÷ revenue', marginClass)
+         '(book+pipe − cost) ÷ (book+pipe)', marginClass)
   ].join('');
 
   $('#dash-resourcing').innerHTML = [
+    card('Booked Load', bookedFTEm.toFixed(0),
+         'FTE-months · signed work'),
+    card('Pipeline Upside', pipelineFTEm.toFixed(0),
+         'FTE-months · weighted', 'teal'),
     card('Peak FTE', peakFTE.toFixed(1),
          (peakIdx >= 0 ? `<strong>${monthLabel(horizon[peakIdx])}</strong> · cap ${peakCapAtPeak.toFixed(1)}` : '—'),
          peakClass),
-    card('Total Demand', totalFTEm.toFixed(0),
-         'FTE-months across 36mo'),
-    card('Utilization', utilPct.toFixed(0) + '%',
-         'demand ÷ capacity', utilClass),
     card('Projects at Risk', atRiskProjects.length,
          atRiskProjects.length === 0 ? 'all within capacity' :
          `${overCapMonths.length} month${overCapMonths.length===1?'':'s'} over cap`,

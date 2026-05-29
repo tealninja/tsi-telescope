@@ -18,6 +18,7 @@ import {
   DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED
 } from './defaults.js';
 import { loadStateBlob, saveStateBlob, STORAGE_KEY as STORAGE_KEY_SEAM } from './api/storage.js';
+import { stageForWinProb } from './util/stages.js';
 
 export const STORAGE_KEY = STORAGE_KEY_SEAM;
 
@@ -194,6 +195,7 @@ export function loadState() {
       }
       if (p.pinned == null) p.pinned = false;
       if (p.winProbability == null) p.winProbability = 100;
+      if (!p.stage) p.stage = stageForWinProb(p.winProbability);
       if (p.lat == null || p.lng == null) {
         const loc = state.locations && state.locations.find(l => l.id === p.locationId);
         const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
@@ -232,6 +234,7 @@ export function seedSampleProjects() {
       costLines: deepCopyMilestones(tpl.costLines || DEFAULT_COST_SCHED),
       pinned: false,
       winProbability: winProb != null ? winProb : 100,
+      stage: stageForWinProb(winProb != null ? winProb : 100),
       lat, lng
     };
   }

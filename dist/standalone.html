@@ -1284,6 +1284,7 @@
     </div>
   </div>
   <div class="masthead-actions">
+    <button class="btn primary" id="btn-quick-add">⚡ Quick Add</button>
     <button class="btn" id="btn-export">Export JSON</button>
     <button class="btn" id="btn-import">Import JSON</button>
     <input type="file" id="file-import" accept="application/json" style="display:none">
@@ -1683,6 +1684,21 @@
       <button class="btn small" id="modal-project-detail-close">Close</button>
     </div>
     <div class="modal-body" id="modal-project-detail-body"></div>
+  </div>
+</div>
+
+<!-- Quick Add modal (fast path for adding existing booked work + pipeline) -->
+<div class="modal-overlay" id="modal-quick-add">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div class="panel-title">⚡ Quick Add Project</div>
+      <button class="btn small" id="modal-quick-add-close">Close</button>
+    </div>
+    <div class="modal-body" id="modal-quick-add-body"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" id="modal-quick-add-cancel">Cancel</button>
+      <button class="btn primary" id="modal-quick-add-save">Add Project</button>
+    </div>
   </div>
 </div>
 
@@ -2177,6 +2193,73 @@ function clearStateBlob() {
 }
 
 
+/* ===== src/util/stages.js ===== */
+/* ============================================================
+   Lifecycle stages for projects.
+
+   `stage` is the single source of truth — sales picks one in the
+   Pipeline / Quick Add UI, planner picks one in the project editor.
+   Win-probability auto-fills from the stage by default; the planner
+   can override per-project for unusual cases.
+
+   `complete` and `cancelled` are terminal states that DROP OUT of
+   demand math (they no longer consume FTE).
+   ============================================================ */
+
+const STAGES = [
+  { id: 'lead',      label: 'Lead',      short: 'Lead',     winProb: 5,   color: '#C05234' },
+  { id: 'qualified', label: 'Qualified', short: 'Qual',     winProb: 20,  color: '#C4A230' },
+  { id: 'proposal',  label: 'Proposal',  short: 'Prop',     winProb: 40,  color: '#C4A230' },
+  { id: 'loi',       label: 'LOI',       short: 'LOI',      winProb: 65,  color: '#00929F' },
+  { id: 'awarded',   label: 'Awarded',   short: 'Awarded',  winProb: 85,  color: '#6E8C34' },
+  { id: 'booked',    label: 'Booked',    short: 'Booked',   winProb: 100, color: '#19446C' },
+  { id: 'complete',  label: 'Complete',  short: 'Done',     winProb: 0,   color: '#646464' },
+  { id: 'cancelled', label: 'Cancelled', short: 'Cancel',   winProb: 0,   color: '#8B1A0A' }
+];
+
+const BY_ID = Object.fromEntries(STAGES.map(s => [s.id, s]));
+
+function stageInfo(id) {
+  return BY_ID[id] || null;
+}
+
+function stageColor(id) {
+  return BY_ID[id] ? BY_ID[id].color : '#888';
+}
+
+function stageLabel(id) {
+  return BY_ID[id] ? BY_ID[id].label : id;
+}
+
+/* Default win-probability for a stage. The planner can override. */
+function winProbForStage(id) {
+  return BY_ID[id] ? BY_ID[id].winProb : 100;
+}
+
+/* Reverse mapping — used when migrating projects that have winProbability
+   but no stage yet (i.e. data that pre-dates the stage column). */
+function stageForWinProb(wp) {
+  if (wp == null) return 'booked';
+  if (wp >= 100) return 'booked';
+  if (wp >= 85)  return 'awarded';
+  if (wp >= 65)  return 'loi';
+  if (wp >= 40)  return 'proposal';
+  if (wp >= 20)  return 'qualified';
+  return 'lead';
+}
+
+/* Terminal states drop out of the demand grid. */
+function stageCountsInLoad(id) {
+  return id !== 'complete' && id !== 'cancelled';
+}
+
+/* Pre-sale stages (everything that isn't booked / complete / cancelled).
+   Used for the dashboard split: booked = committed; pre-sale = upside. */
+function stageIsPreSale(id) {
+  return id === 'lead' || id === 'qualified' || id === 'proposal' || id === 'loi' || id === 'awarded';
+}
+
+
 /* ===== src/state.js ===== */
 /* ============================================================
    Application state — single source of truth.
@@ -2190,6 +2273,7 @@ function clearStateBlob() {
    reset), call setState(newObj) — consumers see the new
    binding automatically via ES module live exports.
    ============================================================ */
+
 
 
 
@@ -2369,6 +2453,7 @@ function loadState() {
       }
       if (p.pinned == null) p.pinned = false;
       if (p.winProbability == null) p.winProbability = 100;
+      if (!p.stage) p.stage = stageForWinProb(p.winProbability);
       if (p.lat == null || p.lng == null) {
         const loc = state.locations && state.locations.find(l => l.id === p.locationId);
         const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
@@ -2407,6 +2492,7 @@ function seedSampleProjects() {
       costLines: deepCopyMilestones(tpl.costLines || DEFAULT_COST_SCHED),
       pinned: false,
       winProbability: winProb != null ? winProb : 100,
+      stage: stageForWinProb(winProb != null ? winProb : 100),
       lat, lng
     };
   }
@@ -2524,6 +2610,7 @@ function setCapacity(roleId, monthIdx, value) {
 
 
 
+
 function computeLoadCurve(N, peak, rampUp, rampDown) {
   if (N <= 0 || peak <= 0) return new Array(Math.max(0,N)).fill(0);
   let R = Math.max(0, Math.min(rampUp, N));
@@ -2588,6 +2675,8 @@ function computeAllDemand() {
   for (const proj of state.projects) {
     projectDemand[proj.id] = {};
     for (const r of state.roles) projectDemand[proj.id][r.id] = new Array(36).fill(0);
+    // Complete / cancelled projects keep their record but drop out of load.
+    if (proj.stage && !stageCountsInLoad(proj.stage)) continue;
 
     const effDurs = effectivePhaseDurations(proj);
     const effTotal = effDurs.reduce((a,b) => a + b, 0);
@@ -4272,6 +4361,7 @@ function renderLegend() {
 
 
 
+
 /* ---------- Project modal ---------- */
 
 let currentProjectId = null;
@@ -4383,7 +4473,11 @@ function buildProjectForm(p) {
         </div>
       </div>
       <div class="field-row">
-        <div class="field" style="flex:2"><label>Win Probability (Pipeline Stage)</label>
+        <div class="field"><label>Stage</label>
+          <select id="pf-stage">${STAGES.map(s => `<option value="${s.id}" ${s.id === (p.stage || 'booked') ? 'selected' : ''}>${escapeHtml(s.label)} · ${s.winProb}%</option>`).join('')}</select>
+          <div class="helper">Booked = signed. Complete/Cancelled drop out of demand math.</div>
+        </div>
+        <div class="field" style="flex:2"><label>Win Probability override</label>
           <div style="display:flex;gap:10px;align-items:center">
             <input type="range" id="pf-winprob" min="0" max="100" step="5" value="${wp}" style="flex:1">
             <input type="number" id="pf-winprob-num" min="0" max="100" step="5" value="${wp}" class="mono" style="width:70px;text-align:right">
@@ -4391,6 +4485,8 @@ function buildProjectForm(p) {
           </div>
           <div class="helper" id="pf-winprob-stage">${winProbStageLabel(wp)}</div>
         </div>
+      </div>
+      <div class="field-row">
         <div class="field"><label>Risk-Weighted Revenue</label>
           <input type="text" id="pf-weighted-rev" readonly value="${fmtMoney((p.contractValue||0) * wp / 100)}" style="background:var(--warm-white);font-family:var(--font-mono);font-weight:600;color:var(--ink-strong)">
           <div class="helper">Contract × win prob — used for portfolio forecasting</div>
@@ -4674,19 +4770,40 @@ function refreshMiniMap(p) {
 function wireWinProbForm(p) {
   const slider = $('#pf-winprob');
   const num = $('#pf-winprob-num');
-  const stage = $('#pf-winprob-stage');
+  const stageLabel = $('#pf-winprob-stage');
+  const stageSel = $('#pf-stage');
   const wrev = $('#pf-weighted-rev');
   if (!slider || !num) return;
-  const sync = (v) => {
+
+  const syncWinProb = (v, opts = {}) => {
     v = Math.max(0, Math.min(100, parseInt(v || '0', 10)));
     p.winProbability = v;
     slider.value = v;
     num.value = v;
-    if (stage) stage.textContent = winProbStageLabel(v);
+    if (stageLabel) stageLabel.textContent = winProbStageLabel(v);
     if (wrev) wrev.value = fmtMoney((p.contractValue||0) * v / 100);
+    // Auto-shift stage to match if user is dragging the slider, but only
+    // when not driven by an explicit stage change (avoids feedback loop).
+    if (stageSel && !opts.fromStage) {
+      const derived = stageForWinProb(v);
+      if (derived !== p.stage && derived !== stageSel.value) {
+        p.stage = derived;
+        stageSel.value = derived;
+      }
+    }
   };
-  slider.addEventListener('input', () => sync(slider.value));
-  num.addEventListener('input', () => sync(num.value));
+  slider.addEventListener('input', () => syncWinProb(slider.value));
+  num.addEventListener('input', () => syncWinProb(num.value));
+
+  if (stageSel) {
+    stageSel.addEventListener('change', () => {
+      p.stage = stageSel.value;
+      // Re-sync win-prob from the stage's default. Planner can override
+      // back via the slider — that won't bump stage back unless the new
+      // win-prob crosses a stage boundary.
+      syncWinProb(winProbForStage(stageSel.value), { fromStage: true });
+    });
+  }
 }
 
 /* ---------- Billing form wiring ---------- */
@@ -4922,11 +5039,185 @@ function readProjectForm(p) {
   p.locationId = $('#pf-loc-id').value;
   p.startMonth = $('#pf-start').value;
   p.notes = $('#pf-notes').value;
+  const stageSel = $('#pf-stage');
+  if (stageSel) p.stage = stageSel.value;
   const lat = parseFloat($('#pf-lat').value);
   const lng = parseFloat($('#pf-lng').value);
   p.lat = Number.isFinite(lat) ? lat : null;
   p.lng = Number.isFinite(lng) ? lng : null;
   return p;
+}
+
+
+/* ===== src/ui/quick-add.js ===== */
+/* ============================================================
+   Quick Add modal — minimal data entry for adding projects fast.
+
+   Five fields: Name, Client, Template, Start Month, Contract Value.
+   Stage defaults to Booked (committed work) — adjustable. Template
+   inheritance fills in phases, detailed FTE allocation, milestones,
+   cost lines, billing mode, default contract value.
+
+   Live "months elapsed / remaining" preview helps catch typos in
+   the start month (e.g. for a project that started last August,
+   the preview reads "started 4 months ago, 14 months remaining").
+   ============================================================ */
+
+
+
+
+
+
+
+
+
+function openQuickAddModal() {
+  const modal = $('#modal-quick-add');
+  if (!modal) return;
+  build();
+  wire();
+  modal.classList.add('open');
+  // Focus the name field for fast typing.
+  requestAnimationFrame(() => { const n = $('#qa-name'); if (n) n.focus(); });
+}
+
+function closeModal() {
+  $('#modal-quick-add').classList.remove('open');
+}
+
+function build() {
+  const body = $('#modal-quick-add-body');
+  const tplOpts = state.templates.map(t =>
+    `<option value="${t.id}" ${t.id === state.templates[0].id ? 'selected' : ''}>${escapeHtml(t.name)} (${fmtMoney(t.defaultContractValue || 0, {compact:true})})</option>`
+  ).join('');
+  const stageOpts = STAGES.map(s =>
+    `<option value="${s.id}" ${s.id === 'booked' ? 'selected' : ''}>${escapeHtml(s.label)} · ${s.winProb}%</option>`
+  ).join('');
+  const today = monthKey(new Date());
+
+  body.innerHTML = `
+    <div class="field"><label>Project Name</label>
+      <input type="text" id="qa-name" placeholder="e.g. Drax Selby — Dryer 4">
+    </div>
+    <div class="field"><label>Client</label>
+      <input type="text" id="qa-client" placeholder="e.g. Drax Group">
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Template</label>
+        <select id="qa-template">${tplOpts}</select>
+        <div class="helper">Phases, FTE allocation, milestones, costs inherited from this.</div>
+      </div>
+      <div class="field"><label>Stage</label>
+        <select id="qa-stage">${stageOpts}</select>
+        <div class="helper">Booked = sold/committed work. Pre-sale stages count weighted by win-prob.</div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Start Month</label>
+        <input type="month" id="qa-start" value="${today}">
+        <div class="helper" id="qa-elapsed">Starting this month.</div>
+      </div>
+      <div class="field"><label>Contract Value</label>
+        <input type="number" id="qa-value" step="1000" placeholder="auto from template" class="mono">
+        <div class="helper">Blank = use template default.</div>
+      </div>
+    </div>
+  `;
+}
+
+function wire() {
+  const start = $('#qa-start');
+  const elapsed = $('#qa-elapsed');
+  const template = $('#qa-template');
+  const valueInp = $('#qa-value');
+
+  function refreshElapsed() {
+    const sm = start.value;
+    if (!sm) { elapsed.textContent = ''; return; }
+    const todayKey = monthKey(new Date());
+    const dm = monthsBetween(todayKey, sm);
+    const tpl = getTemplate(template.value);
+    const baseDur = tpl ? tpl.phases.reduce((a, p) => a + (p.duration || 0), 0) : 0;
+    if (dm > 0) {
+      elapsed.textContent = `Starts in ${dm} month${dm === 1 ? '' : 's'} · ${baseDur} mo total duration.`;
+    } else if (dm === 0) {
+      elapsed.textContent = `Starting this month · ${baseDur} mo total duration.`;
+    } else {
+      const passed = -dm;
+      const remaining = Math.max(0, baseDur - passed);
+      elapsed.textContent = `Started ${passed} month${passed === 1 ? '' : 's'} ago · ${remaining} mo remaining of ${baseDur} mo total.`;
+    }
+  }
+
+  function refreshValueHint() {
+    const tpl = getTemplate(template.value);
+    if (tpl && tpl.defaultContractValue && !valueInp.value) {
+      valueInp.placeholder = String(tpl.defaultContractValue);
+    }
+  }
+
+  start.addEventListener('input', refreshElapsed);
+  start.addEventListener('change', refreshElapsed);
+  template.addEventListener('change', () => { refreshElapsed(); refreshValueHint(); });
+  refreshElapsed();
+  refreshValueHint();
+
+  $('#modal-quick-add-cancel').onclick = closeModal;
+  $('#modal-quick-add-close').onclick = closeModal;
+  $('#modal-quick-add-save').onclick = handleSave;
+  // Submit on Enter from any input.
+  $('#modal-quick-add-body').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      handleSave();
+    }
+  });
+}
+
+function handleSave() {
+  const name = $('#qa-name').value.trim();
+  if (!name) { alert('Name required'); return; }
+  const client = $('#qa-client').value.trim();
+  const tplId = $('#qa-template').value;
+  const tpl = getTemplate(tplId);
+  if (!tpl) { alert('Pick a template'); return; }
+  const stage = $('#qa-stage').value;
+  const startMonth = $('#qa-start').value || monthKey(new Date());
+  const rawValue = $('#qa-value').value.trim();
+  const contractValue = rawValue
+    ? Math.max(0, parseFloat(rawValue) || 0)
+    : (tpl.defaultContractValue || 0);
+
+  // Default location: first location with multiplier 1.0 (US baseline), else first.
+  const baseLoc = state.locations.find(l => l.multiplier === 1.0) || state.locations[0];
+
+  const p = {
+    id: uid('proj'),
+    name,
+    client,
+    location: baseLoc ? baseLoc.name : '',
+    locationId: baseLoc ? baseLoc.id : null,
+    templateId: tplId,
+    startMonth,
+    notes: '',
+    phases: deepCopy(tpl.phases),
+    contractValue,
+    billingMode: tpl.billingMode || 'milestone',
+    milestones: deepCopyMilestones(tpl.milestones || DEFAULT_MILESTONE_SCHED),
+    costLines: deepCopyMilestones(tpl.costLines || DEFAULT_COST_SCHED),
+    pinned: false,
+    stage,
+    winProbability: winProbForStage(stage),
+    lat: baseLoc ? baseLoc.lat : null,
+    lng: baseLoc ? baseLoc.lng : null,
+    detailedLoading: tpl.detailedLoading ? deepCopy(tpl.detailedLoading) : {}
+  };
+
+  addProject(p);
+  saveState();
+  closeModal();
+  renderAll();
+  toast(`Added "${name}" as ${stage}`);
 }
 
 
@@ -4936,6 +5227,7 @@ function readProjectForm(p) {
    Each card opens the project editor modal; delete is inline.
    KPIs roll up demand and capacity over the visible horizon.
    ============================================================ */
+
 
 
 
@@ -4961,11 +5253,12 @@ function renderProjects() {
         <button class="btn small danger" data-act="del" data-id="${p.id}">Del</button>
       </div>
       <div class="project-card-tags">
+        <span class="tag" style="background:${stageColor(p.stage || 'booked')};color:#fff;font-weight:700">${escapeHtml(stageLabel(p.stage || 'booked'))}</span>
         <span class="tag template">${tpl ? escapeHtml(tpl.name) : 'custom'}</span>
         ${loc ? `<span class="tag location">${escapeHtml(loc.name)}</span>` : ''}
         ${loc && loc.multiplier !== 1.0 ? `<span class="tag multiplier">${loc.multiplier.toFixed(2)}×</span>` : ''}
-        <span class="tag" style="background:${wpColor};color:#fff">${wp}% · ${wp >= 100 ? 'booked' : wp >= 85 ? 'awarded' : wp >= 65 ? 'LOI' : wp >= 40 ? 'proposal' : wp >= 20 ? 'qualified' : 'lead'}</span>
-        ${p.pinned ? '<span class="tag" style="background:var(--coral);color:#fff">🔒 locked</span>' : ''}
+        <span class="tag" style="background:${wpColor};color:#fff">${wp}%</span>
+        ${p.pinned ? '<span class="tag" style="background:var(--coral);color:#fff">🔒</span>' : ''}
       </div>
       <div class="project-card-name">${escapeHtml(p.name)}</div>
       <div class="project-card-meta">${escapeHtml(p.client || '—')} · ${escapeHtml(p.location || '')}</div>
@@ -7403,22 +7696,35 @@ function renderDashboard() {
   $('#dash-asof').textContent =
     `${monthLabel(horizon[0], false)} → ${monthLabel(horizon[35], false)}`;
 
-  // ---- Financial roll-ups across the visible horizon ----
-  let totalRevenue = 0, totalCost = 0;
-  for (let i = 0; i < 36; i++) {
-    totalRevenue += cf.revenueRecognized[i];
-    totalCost    += cf.costOut[i];
-  }
-  // Risk-weighted revenue: scale each project's recognized revenue by win-prob.
-  let weightedRevenue = 0;
+  // ---- Financial roll-ups across the visible horizon, split by stage ----
+  let bookedRevenue = 0, pipelineUpside = 0, totalCost = 0;
   for (const p of state.projects) {
     const pcf = cf.perProject[p.id];
     if (!pcf) continue;
+    const stage = p.stage || 'booked';
     const wp = (p.winProbability != null ? p.winProbability : 100) / 100;
-    for (let i = 0; i < 36; i++) weightedRevenue += pcf.revenueRecognized[i] * wp;
+    let revSum = 0;
+    for (let i = 0; i < 36; i++) revSum += pcf.revenueRecognized[i];
+    if (stage === 'booked') bookedRevenue += revSum;
+    else if (stage === 'complete' || stage === 'cancelled') { /* drop */ }
+    else pipelineUpside += revSum * wp;
   }
+  for (let i = 0; i < 36; i++) totalCost += cf.costOut[i];
+  const totalRevenue = bookedRevenue + pipelineUpside;
   const grossMargin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
   const marginClass = grossMargin >= 20 ? 'ok' : grossMargin >= 10 ? 'warn' : 'bad';
+
+  // ---- Booked vs Pipeline FTE-months ----
+  let bookedFTEm = 0, pipelineFTEm = 0;
+  for (const p of state.projects) {
+    const stage = p.stage || 'booked';
+    if (stage === 'complete' || stage === 'cancelled') continue;
+    const pd = projectDemand[p.id];
+    let sum = 0;
+    for (const r of state.roles) for (let i = 0; i < 36; i++) sum += pd[r.id][i];
+    if (stage === 'booked') bookedFTEm += sum;
+    else pipelineFTEm += sum * ((p.winProbability != null ? p.winProbability : 100) / 100);
+  }
 
   // ---- Resourcing roll-ups ----
   let totalFTEm = 0, totalCap = 0;
@@ -7492,25 +7798,31 @@ function renderDashboard() {
   atRiskProjects.sort((a,b) => a.overCapMonth - b.overCapMonth);
 
   // ---- Render cards ----
+  const bookedCount = state.projects.filter(p => (p.stage || 'booked') === 'booked').length;
+  const pipelineCount = state.projects.filter(p => {
+    const s = p.stage || 'booked';
+    return s !== 'booked' && s !== 'complete' && s !== 'cancelled';
+  }).length;
+
   $('#dash-financial').innerHTML = [
-    card('Total Revenue', fmtMoney(totalRevenue, {compact:true}),
-         'recognized · ' + state.projects.length + ' projects'),
-    card('Risk-Weighted Revenue', fmtMoney(weightedRevenue, {compact:true}),
-         '× win probability · expected value', 'teal'),
+    card('Booked Revenue', fmtMoney(bookedRevenue, {compact:true}),
+         `${bookedCount} signed project${bookedCount === 1 ? '' : 's'}`),
+    card('Pipeline Upside', fmtMoney(pipelineUpside, {compact:true}),
+         `${pipelineCount} weighted by win-prob`, 'teal'),
     card('Total Cost', fmtMoney(totalCost, {compact:true}),
          'cost-line outflows'),
     card('Gross Margin', grossMargin.toFixed(1) + '%',
-         'revenue − cost ÷ revenue', marginClass)
+         '(book+pipe − cost) ÷ (book+pipe)', marginClass)
   ].join('');
 
   $('#dash-resourcing').innerHTML = [
+    card('Booked Load', bookedFTEm.toFixed(0),
+         'FTE-months · signed work'),
+    card('Pipeline Upside', pipelineFTEm.toFixed(0),
+         'FTE-months · weighted', 'teal'),
     card('Peak FTE', peakFTE.toFixed(1),
          (peakIdx >= 0 ? `<strong>${monthLabel(horizon[peakIdx])}</strong> · cap ${peakCapAtPeak.toFixed(1)}` : '—'),
          peakClass),
-    card('Total Demand', totalFTEm.toFixed(0),
-         'FTE-months across 36mo'),
-    card('Utilization', utilPct.toFixed(0) + '%',
-         'demand ÷ capacity', utilClass),
     card('Projects at Risk', atRiskProjects.length,
          atRiskProjects.length === 0 ? 'all within capacity' :
          `${overCapMonths.length} month${overCapMonths.length===1?'':'s'} over cap`,
@@ -7632,6 +7944,8 @@ function card(label, value, sub, cls) {
 
 
 
+
+
 /* ============================================================
    UI WIRING
    ============================================================ */
@@ -7695,6 +8009,7 @@ $('#file-import').addEventListener('change', (e) => {
         }
         if (p.pinned == null) p.pinned = false;
         if (p.winProbability == null) p.winProbability = 100;
+        if (!p.stage) p.stage = stageForWinProb(p.winProbability);
         if (p.lat == null || p.lng == null) {
           const loc = state.locations.find(l => l.id === p.locationId);
           const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
@@ -7734,6 +8049,7 @@ $('#btn-reset').addEventListener('click', () => {
 });
 
 $('#btn-new-project').addEventListener('click', () => openProjectModal(null));
+$('#btn-quick-add').addEventListener('click', () => openQuickAddModal());
 
 /* ---------- Capacity view top-level buttons ---------- */
 $('#btn-cap-fill').addEventListener('click', () => {

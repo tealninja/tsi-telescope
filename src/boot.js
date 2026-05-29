@@ -17,11 +17,13 @@ import {
   addLocation, addRole
 } from './state.js';
 import { clearStateBlob } from './api/storage.js';
+import { stageForWinProb } from './util/stages.js';
 import { migrateAllToDetailed } from './compute/demand.js';
 import { renderRoles } from './ui/roles-view.js';
 import { renderLocations } from './ui/locations-view.js';
 import { renderCapacity } from './ui/capacity-view.js';
 import { openProjectModal } from './ui/project-editor.js';
+import { openQuickAddModal } from './ui/quick-add.js';
 import { renderProjects } from './ui/projects-view.js';
 import { renderTemplates } from './ui/templates-view.js';
 import { renderCapVDem } from './ui/capvdem-view.js';
@@ -94,6 +96,7 @@ $('#file-import').addEventListener('change', (e) => {
         }
         if (p.pinned == null) p.pinned = false;
         if (p.winProbability == null) p.winProbability = 100;
+        if (!p.stage) p.stage = stageForWinProb(p.winProbability);
         if (p.lat == null || p.lng == null) {
           const loc = state.locations.find(l => l.id === p.locationId);
           const def = DEFAULT_LOCATIONS.find(l => l.id === p.locationId);
@@ -133,6 +136,7 @@ $('#btn-reset').addEventListener('click', () => {
 });
 
 $('#btn-new-project').addEventListener('click', () => openProjectModal(null));
+$('#btn-quick-add').addEventListener('click', () => openQuickAddModal());
 
 /* ---------- Capacity view top-level buttons ---------- */
 $('#btn-cap-fill').addEventListener('click', () => {

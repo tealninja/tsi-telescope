@@ -11,6 +11,7 @@
 
 import { $, $$ } from '../util/dom.js';
 import { escapeHtml, fmtMoney, winProbStageLabel } from '../util/format.js';
+import { STAGES, winProbForStage, stageForWinProb } from '../util/stages.js';
 import { monthKey } from '../util/dates.js';
 import { deepCopy, deepCopyMilestones, uid } from '../util/clone.js';
 import {
@@ -140,7 +141,11 @@ function buildProjectForm(p) {
         </div>
       </div>
       <div class="field-row">
-        <div class="field" style="flex:2"><label>Win Probability (Pipeline Stage)</label>
+        <div class="field"><label>Stage</label>
+          <select id="pf-stage">${STAGES.map(s => `<option value="${s.id}" ${s.id === (p.stage || 'booked') ? 'selected' : ''}>${escapeHtml(s.label)} · ${s.winProb}%</option>`).join('')}</select>
+          <div class="helper">Booked = signed. Complete/Cancelled drop out of demand math.</div>
+        </div>
+        <div class="field" style="flex:2"><label>Win Probability override</label>
           <div style="display:flex;gap:10px;align-items:center">
             <input type="range" id="pf-winprob" min="0" max="100" step="5" value="${wp}" style="flex:1">
             <input type="number" id="pf-winprob-num" min="0" max="100" step="5" value="${wp}" class="mono" style="width:70px;text-align:right">
@@ -148,6 +153,8 @@ function buildProjectForm(p) {
           </div>
           <div class="helper" id="pf-winprob-stage">${winProbStageLabel(wp)}</div>
         </div>
+      </div>
+      <div class="field-row">
         <div class="field"><label>Risk-Weighted Revenue</label>
           <input type="text" id="pf-weighted-rev" readonly value="${fmtMoney((p.contractValue||0) * wp / 100)}" style="background:var(--warm-white);font-family:var(--font-mono);font-weight:600;color:var(--ink-strong)">
           <div class="helper">Contract × win prob — used for portfolio forecasting</div>
@@ -431,19 +438,40 @@ function refreshMiniMap(p) {
 function wireWinProbForm(p) {
   const slider = $('#pf-winprob');
   const num = $('#pf-winprob-num');
-  const stage = $('#pf-winprob-stage');
+  const stageLabel = $('#pf-winprob-stage');
+  const stageSel = $('#pf-stage');
   const wrev = $('#pf-weighted-rev');
   if (!slider || !num) return;
-  const sync = (v) => {
+
+  const syncWinProb = (v, opts = {}) => {
     v = Math.max(0, Math.min(100, parseInt(v || '0', 10)));
     p.winProbability = v;
     slider.value = v;
     num.value = v;
-    if (stage) stage.textContent = winProbStageLabel(v);
+    if (stageLabel) stageLabel.textContent = winProbStageLabel(v);
     if (wrev) wrev.value = fmtMoney((p.contractValue||0) * v / 100);
+    // Auto-shift stage to match if user is dragging the slider, but only
+    // when not driven by an explicit stage change (avoids feedback loop).
+    if (stageSel && !opts.fromStage) {
+      const derived = stageForWinProb(v);
+      if (derived !== p.stage && derived !== stageSel.value) {
+        p.stage = derived;
+        stageSel.value = derived;
+      }
+    }
   };
-  slider.addEventListener('input', () => sync(slider.value));
-  num.addEventListener('input', () => sync(num.value));
+  slider.addEventListener('input', () => syncWinProb(slider.value));
+  num.addEventListener('input', () => syncWinProb(num.value));
+
+  if (stageSel) {
+    stageSel.addEventListener('change', () => {
+      p.stage = stageSel.value;
+      // Re-sync win-prob from the stage's default. Planner can override
+      // back via the slider — that won't bump stage back unless the new
+      // win-prob crosses a stage boundary.
+      syncWinProb(winProbForStage(stageSel.value), { fromStage: true });
+    });
+  }
 }
 
 /* ---------- Billing form wiring ---------- */
@@ -679,6 +707,8 @@ function readProjectForm(p) {
   p.locationId = $('#pf-loc-id').value;
   p.startMonth = $('#pf-start').value;
   p.notes = $('#pf-notes').value;
+  const stageSel = $('#pf-stage');
+  if (stageSel) p.stage = stageSel.value;
   const lat = parseFloat($('#pf-lat').value);
   const lng = parseFloat($('#pf-lng').value);
   p.lat = Number.isFinite(lat) ? lat : null;

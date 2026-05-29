@@ -13,6 +13,7 @@
 import { addMonths, monthsBetween } from '../util/dates.js';
 import { state, getLocation } from '../state.js';
 import { defaultLoading } from '../defaults.js';
+import { stageCountsInLoad } from '../util/stages.js';
 
 export function computeLoadCurve(N, peak, rampUp, rampDown) {
   if (N <= 0 || peak <= 0) return new Array(Math.max(0,N)).fill(0);
@@ -78,6 +79,8 @@ export function computeAllDemand() {
   for (const proj of state.projects) {
     projectDemand[proj.id] = {};
     for (const r of state.roles) projectDemand[proj.id][r.id] = new Array(36).fill(0);
+    // Complete / cancelled projects keep their record but drop out of load.
+    if (proj.stage && !stageCountsInLoad(proj.stage)) continue;
 
     const effDurs = effectivePhaseDurations(proj);
     const effTotal = effDurs.reduce((a,b) => a + b, 0);
