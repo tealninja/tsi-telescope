@@ -28,6 +28,14 @@ import {
 } from '../compute/demand.js';
 import { computePortfolioCashflow } from '../compute/cashflow.js';
 import { openProjectDetailModal } from './project-detail.js';
+import { renderMap } from './map-view.js';
+
+let _mapExpanded = false;
+const MAP_LS_KEY = 'tsi_dash_map_expanded_v1';
+try {
+  const v = localStorage.getItem(MAP_LS_KEY);
+  if (v === '1') _mapExpanded = true;
+} catch (e) { /* ignore */ }
 
 export function renderDashboard() {
   const horizon = horizonMonths();
@@ -190,6 +198,43 @@ export function renderDashboard() {
       el.addEventListener('click', () => openProjectDetailModal(el.dataset.proj));
     });
   }
+
+  renderMapPanel();
+}
+
+function renderMapPanel() {
+  const header = $('#dash-map-header');
+  const caret  = $('#dash-map-caret');
+  const ctrls  = $('#dash-map-controls');
+  const body   = $('#dash-map-body');
+  const wrap   = $('#dash-map-wrap');
+  if (!header || !body || !wrap) return;
+
+  const apply = () => {
+    if (_mapExpanded) {
+      body.style.display = 'block';
+      ctrls.style.display = 'flex';
+      caret.textContent = '▾';
+      // Defer to next frame so the wrap has its layout dimensions before draw.
+      requestAnimationFrame(() => renderMap(wrap));
+    } else {
+      body.style.display = 'none';
+      ctrls.style.display = 'none';
+      caret.textContent = '▸';
+    }
+  };
+
+  if (!header._wired) {
+    header._wired = true;
+    header.addEventListener('click', (e) => {
+      // Ignore clicks on the controls themselves so toggles don't collapse the panel.
+      if (e.target.closest('#dash-map-controls')) return;
+      _mapExpanded = !_mapExpanded;
+      try { localStorage.setItem(MAP_LS_KEY, _mapExpanded ? '1' : '0'); } catch (_) {}
+      apply();
+    });
+  }
+  apply();
 }
 
 // cls applies to both the top-border accent and the value color, except

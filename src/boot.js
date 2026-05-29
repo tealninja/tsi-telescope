@@ -27,7 +27,6 @@ import { renderCapVDem } from './ui/capvdem-view.js';
 import { renderHistogram } from './ui/histogram-view.js';
 import { renderGantt } from './ui/gantt-view.js';
 import { renderDashboard } from './ui/dashboard-view.js';
-import { renderMap } from './ui/map-view.js';
 
 
 
@@ -45,7 +44,6 @@ $$('.tab').forEach(tab => {
     $('#view-'+v).classList.add('active');
     if (v === 'dashboard') renderDashboard();
     if (v === 'projects')  renderProjects();
-    if (v === 'map')       renderMap();
     if (v === 'capacity')  renderCapacity();
     if (v === 'gantt')     renderGantt();
     if (v === 'histogram') renderHistogram();
@@ -191,7 +189,6 @@ export function renderAll() {
   if (!activeTab) return;
   const v = activeTab.dataset.view;
   if (v === 'dashboard') renderDashboard();
-  if (v === 'map')       renderMap();
   if (v === 'capacity')  renderCapacity();
   if (v === 'gantt')     renderGantt();
   if (v === 'histogram') renderHistogram();

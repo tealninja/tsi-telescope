@@ -21,6 +21,7 @@ import {
   buildDetailedScheduleSection, wireDetailedSchedule,
   snapshotPhases, rebuildDetailedAfterPhaseChange
 } from './detailed-schedule.js';
+import { renderMiniMap } from './map-view.js';
 import {
   DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED
 } from '../defaults.js';
@@ -115,61 +116,91 @@ function buildProjectForm(p) {
   });
   phasesHTML += '</tbody></table>';
 
+  const wp = p.winProbability != null ? p.winProbability : 100;
+  const totalBase = p.phases.reduce((a,x)=>a+x.duration,0);
+
   return `
-    <div class="field-row">
-      <div class="field"><label>Project Name</label><input type="text" id="pf-name" value="${escapeHtml(p.name)}"></div>
-      <div class="field"><label>Client</label><input type="text" id="pf-client" value="${escapeHtml(p.client||'')}"></div>
-      <div class="field"><label>Location (city/region)</label><input type="text" id="pf-location" value="${escapeHtml(p.location||'')}"></div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" data-pftab="details">Details</div>
+      <div class="modal-tab" data-pftab="financials">Financials</div>
+      <div class="modal-tab" data-pftab="resources">Resources</div>
+      <div class="modal-tab" data-pftab="location">Location</div>
     </div>
-    <div class="field-row">
-      <div class="field"><label>Template</label>
-        <select id="pf-template">${tplOptions}</select>
-        <div class="helper">Changing template will reload phases from defaults.</div>
+
+    <div class="pftab active" id="pftab-details">
+      <div class="field-row">
+        <div class="field"><label>Project Name</label><input type="text" id="pf-name" value="${escapeHtml(p.name)}"></div>
+        <div class="field"><label>Client</label><input type="text" id="pf-client" value="${escapeHtml(p.client||'')}"></div>
       </div>
-      <div class="field"><label>Country / Region</label>
-        <select id="pf-loc-id">${locOptions}</select>
-        <div class="helper">Applies a speed multiplier to all phase durations.</div>
-      </div>
-      <div class="field"><label>Start Month (YYYY-MM)</label>
-        <input type="month" id="pf-start" value="${p.startMonth}">
-      </div>
-      <div class="field"><label>Total Effective Duration</label>
-        <input type="text" id="pf-total" readonly value="${totalEffectiveDuration(p)} mo (${p.phases.reduce((a,x)=>a+x.duration,0)} base × ${mult.toFixed(2)})" style="background:var(--warm-white);font-family:var(--font-mono);font-weight:600;color:var(--ink-strong)">
-      </div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Latitude</label>
-        <input type="number" id="pf-lat" step="0.0001" min="-90" max="90" value="${p.lat != null ? p.lat : ''}" class="mono" placeholder="e.g. 47.6588">
-        <div class="helper">Decimal degrees. Defaults to the location's centroid; override for a precise site.</div>
-      </div>
-      <div class="field"><label>Longitude</label>
-        <input type="number" id="pf-lng" step="0.0001" min="-180" max="180" value="${p.lng != null ? p.lng : ''}" class="mono" placeholder="e.g. -117.4260">
-      </div>
-    </div>
-    <div class="field-row">
-      <div class="field" style="flex:2"><label>Win Probability (Pipeline Stage)</label>
-        <div style="display:flex;gap:10px;align-items:center">
-          <input type="range" id="pf-winprob" min="0" max="100" step="5" value="${p.winProbability != null ? p.winProbability : 100}" style="flex:1">
-          <input type="number" id="pf-winprob-num" min="0" max="100" step="5" value="${p.winProbability != null ? p.winProbability : 100}" class="mono" style="width:70px;text-align:right">
-          <span style="color:var(--ink-mute)">%</span>
+      <div class="field-row">
+        <div class="field"><label>Template</label>
+          <select id="pf-template">${tplOptions}</select>
+          <div class="helper">Changing template reloads phases + the resource grid from the template defaults.</div>
         </div>
-        <div class="helper" id="pf-winprob-stage">${winProbStageLabel(p.winProbability != null ? p.winProbability : 100)}</div>
+        <div class="field"><label>Start Month (YYYY-MM)</label>
+          <input type="month" id="pf-start" value="${p.startMonth}">
+        </div>
       </div>
-      <div class="field"><label>Risk-Weighted Revenue</label>
-        <input type="text" id="pf-weighted-rev" readonly value="${fmtMoney((p.contractValue||0) * (p.winProbability != null ? p.winProbability : 100) / 100)}" style="background:var(--warm-white);font-family:var(--font-mono);font-weight:600;color:var(--ink-strong)">
-        <div class="helper">Contract × win prob — used for portfolio forecasting</div>
+      <div class="field-row">
+        <div class="field" style="flex:2"><label>Win Probability (Pipeline Stage)</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input type="range" id="pf-winprob" min="0" max="100" step="5" value="${wp}" style="flex:1">
+            <input type="number" id="pf-winprob-num" min="0" max="100" step="5" value="${wp}" class="mono" style="width:70px;text-align:right">
+            <span style="color:var(--ink-mute)">%</span>
+          </div>
+          <div class="helper" id="pf-winprob-stage">${winProbStageLabel(wp)}</div>
+        </div>
+        <div class="field"><label>Risk-Weighted Revenue</label>
+          <input type="text" id="pf-weighted-rev" readonly value="${fmtMoney((p.contractValue||0) * wp / 100)}" style="background:var(--warm-white);font-family:var(--font-mono);font-weight:600;color:var(--ink-strong)">
+          <div class="helper">Contract × win prob — used for portfolio forecasting</div>
+        </div>
       </div>
+      <div class="field"><label>Notes</label><textarea id="pf-notes" rows="3">${escapeHtml(p.notes||'')}</textarea></div>
     </div>
-    <div class="field"><label>Notes</label><textarea id="pf-notes" rows="2">${escapeHtml(p.notes||'')}</textarea></div>
 
-    <div class="section-label" style="margin-top:20px">Commercial · Contract &amp; Billing</div>
-    ${buildBillingSection(p)}
+    <div class="pftab" id="pftab-financials">
+      <div class="section-label" style="margin-top:0">Commercial · Contract &amp; Billing</div>
+      ${buildBillingSection(p)}
+    </div>
 
-    <div class="section-label" style="margin-top:20px">Phases · Duration</div>
-    <div id="pf-phases">${phasesHTML}</div>
+    <div class="pftab" id="pftab-resources">
+      <div class="field-row">
+        <div class="field"><label>Total Effective Duration</label>
+          <input type="text" id="pf-total" readonly value="${totalEffectiveDuration(p)} mo (${totalBase} base × ${mult.toFixed(2)})" style="background:var(--warm-white);font-family:var(--font-mono);font-weight:600;color:var(--ink-strong)">
+          <div class="helper">Effective = base × the location's speed multiplier.</div>
+        </div>
+      </div>
+      <div class="section-label" style="margin-top:8px">Phases · Duration</div>
+      <div id="pf-phases">${phasesHTML}</div>
 
-    <div class="section-label" style="margin-top:20px">Resource Allocation · FTE per Role per Month</div>
-    <div id="pf-detailed">${buildDetailedScheduleSection(p, 'pf')}</div>
+      <div class="section-label" style="margin-top:20px">Resource Allocation · FTE per Role per Month</div>
+      <div id="pf-detailed">${buildDetailedScheduleSection(p, 'pf')}</div>
+    </div>
+
+    <div class="pftab" id="pftab-location">
+      <div class="field-row">
+        <div class="field"><label>Location (city/region)</label>
+          <input type="text" id="pf-location" value="${escapeHtml(p.location||'')}">
+          <div class="helper">Free-text label shown on cards. Example: "Spokane, WA".</div>
+        </div>
+        <div class="field"><label>Country / Region</label>
+          <select id="pf-loc-id">${locOptions}</select>
+          <div class="helper">Applies a speed multiplier to all phase durations.</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Latitude</label>
+          <input type="number" id="pf-lat" step="0.0001" min="-90" max="90" value="${p.lat != null ? p.lat : ''}" class="mono" placeholder="e.g. 47.6588">
+          <div class="helper">Decimal degrees. Auto-fills from the chosen country if blank.</div>
+        </div>
+        <div class="field"><label>Longitude</label>
+          <input type="number" id="pf-lng" step="0.0001" min="-180" max="180" value="${p.lng != null ? p.lng : ''}" class="mono" placeholder="e.g. -117.4260">
+        </div>
+      </div>
+      <div class="section-label">Pin Preview</div>
+      <div class="mini-map-wrap" id="pf-minimap"></div>
+      <div class="helper" style="margin-top:6px">Highlighted pin = this project. Other portfolio pins shown faintly for context.</div>
+    </div>
   `;
 }
 
@@ -360,6 +391,43 @@ function wireProjectForm(p) {
   wireBillingForm(p);
   wireWinProbForm(p);
   wireDetailedSchedule(p, 'pf');
+  wireModalTabs(p);
+  wireMiniMap(p);
+}
+
+function wireModalTabs(p) {
+  const body = $('#modal-project-body');
+  body.querySelectorAll('.modal-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.pftab;
+      body.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+      body.querySelectorAll('.pftab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      body.querySelector('#pftab-' + target).classList.add('active');
+      if (target === 'location') refreshMiniMap(p);
+    });
+  });
+}
+
+function wireMiniMap(p) {
+  // Re-draw the mini map whenever lat/lng change so the highlighted
+  // pin tracks the working copy in real time.
+  const lat = $('#pf-lat'), lng = $('#pf-lng');
+  if (!lat || !lng) return;
+  [lat, lng].forEach(inp => {
+    inp.addEventListener('input', () => {
+      const a = parseFloat(lat.value), b = parseFloat(lng.value);
+      p.lat = Number.isFinite(a) ? a : null;
+      p.lng = Number.isFinite(b) ? b : null;
+      refreshMiniMap(p);
+    });
+  });
+}
+
+function refreshMiniMap(p) {
+  const wrap = $('#pf-minimap');
+  if (!wrap) return;
+  renderMiniMap(wrap, { project: p });
 }
 
 function wireWinProbForm(p) {

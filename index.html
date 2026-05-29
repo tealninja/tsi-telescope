@@ -52,7 +52,6 @@
 <nav class="tabs">
   <div class="tab active" data-view="dashboard">Dashboard</div>
   <div class="tab" data-view="projects">Projects</div>
-  <div class="tab" data-view="map">Map</div>
   <div class="tab" data-view="capacity">Capacity</div>
   <div class="tab" data-view="gantt">Gantt</div>
   <div class="tab" data-view="histogram">Demand Histogram</div>
@@ -91,6 +90,35 @@
       </div>
       <div class="panel-body" id="dash-risk-body"></div>
     </div>
+
+    <div class="panel" id="dash-map-panel">
+      <div class="panel-header" style="cursor:pointer" id="dash-map-header">
+        <div style="flex:1">
+          <div class="eyebrow">Geography</div>
+          <div class="panel-title"><span id="dash-map-caret">▸</span> Portfolio Map</div>
+        </div>
+        <div id="dash-map-controls" style="display:none;gap:14px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="margin:0">Color by</label>
+            <select id="map-color-by" style="width:auto;font-size:12px">
+              <option value="winprob" selected>Win probability</option>
+              <option value="template">Template</option>
+              <option value="value">Contract value</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer">
+            <input type="checkbox" id="map-graticule" style="width:auto;margin:0;cursor:pointer">
+            Graticule
+          </label>
+          <button class="btn ghost small" id="map-reset-view">Reset View</button>
+          <span>drag to pan · scroll to zoom</span>
+        </div>
+      </div>
+      <div class="panel-body flush" id="dash-map-body" style="display:none">
+        <div class="map-wrap" id="dash-map-wrap"></div>
+        <div class="legend" id="map-legend"></div>
+      </div>
+    </div>
   </section>
 
   <!-- PROJECTS VIEW -->
@@ -113,37 +141,6 @@
     <div class="kpi-row" id="kpi-row"></div>
   </section>
 
-  <!-- MAP VIEW -->
-  <section class="view" id="view-map">
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <div class="eyebrow">Geography</div>
-          <div class="panel-title">Portfolio Map · Orthographic Globe</div>
-        </div>
-        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--gray)">
-          <div style="display:flex;gap:6px;align-items:center">
-            <label style="margin:0">Color by</label>
-            <select id="map-color-by" style="width:auto;font-size:12px">
-              <option value="winprob" selected>Win probability</option>
-              <option value="template">Template</option>
-              <option value="value">Contract value</option>
-            </select>
-          </div>
-          <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer">
-            <input type="checkbox" id="map-graticule" checked style="width:auto;margin:0;cursor:pointer">
-            Graticule
-          </label>
-          <button class="btn ghost small" id="map-reset-view">Reset View</button>
-          <span>drag to rotate · scroll to zoom</span>
-        </div>
-      </div>
-      <div class="panel-body flush">
-        <div class="map-wrap" id="map-wrap"></div>
-        <div class="legend" id="map-legend"></div>
-      </div>
-    </div>
-  </section>
 
   <!-- CAPACITY VIEW -->
   <section class="view" id="view-capacity">
