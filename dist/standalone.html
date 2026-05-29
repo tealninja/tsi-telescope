@@ -7611,6 +7611,24 @@ renderAll();
 
 window.addEventListener('beforeunload', saveState);
 
+// Re-render charts on window resize (rotate / browser-window change) so
+// the responsive colW math picks up the new wrap width. Debounced so it
+// fires once when the user finishes resizing instead of on every pixel.
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    const activeTab = document.querySelector('.tab.active');
+    if (!activeTab) return;
+    const v = activeTab.dataset.view;
+    // Only redraw views whose charts depend on container width.
+    if (v === 'dashboard') renderDashboard();
+    if (v === 'histogram') renderHistogram();
+    if (v === 'capvdem')   renderCapVDem();
+    if (v === 'gantt')     renderGantt();
+  }, 200);
+});
+
 
 </script>
 </body>
