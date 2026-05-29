@@ -7,7 +7,7 @@
 import { $ } from '../util/dom.js';
 import { escapeHtml, fmtMoney, winProbColor } from '../util/format.js';
 import { addMonths, monthLabel } from '../util/dates.js';
-import { state, getTemplate, getLocation, horizonMonths, saveState } from '../state.js';
+import { state, getTemplate, getLocation, horizonMonths, saveState, removeProject } from '../state.js';
 import { totalEffectiveDuration, computeAllDemand } from '../compute/demand.js';
 import { openProjectModal } from './project-editor.js';
 import { renderAll } from '../boot.js';
@@ -58,7 +58,7 @@ export function renderProjects() {
       if (e.target.dataset.act === 'del') {
         e.stopPropagation();
         if (confirm(`Delete project "${p.name}"?`)) {
-          state.projects = state.projects.filter(x => x.id !== p.id);
+          removeProject(p.id);
           saveState(); renderAll();
         }
         return;

@@ -14,7 +14,8 @@ import { escapeHtml, fmtMoney, winProbStageLabel } from '../util/format.js';
 import { monthKey } from '../util/dates.js';
 import { deepCopy, deepCopyMilestones, uid } from '../util/clone.js';
 import {
-  state, getPhase, getTemplate, getLocation, getProject, saveState
+  state, getPhase, getTemplate, getLocation, getProject, saveState,
+  addProject, replaceProject
 } from '../state.js';
 import { totalEffectiveDuration } from '../compute/demand.js';
 import {
@@ -64,11 +65,8 @@ export function openProjectModal(projectId) {
   $('#modal-project-save').onclick = () => {
     const out = readProjectForm(p);
     if (!out.name.trim()) { alert('Name required'); return; }
-    if (isNew) state.projects.push(out);
-    else {
-      const idx = state.projects.findIndex(x => x.id === out.id);
-      state.projects[idx] = out;
-    }
+    if (isNew) addProject(out);
+    else replaceProject(out);
     saveState();
     closeProjectModal();
     renderAll();

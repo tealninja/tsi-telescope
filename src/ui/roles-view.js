@@ -5,7 +5,7 @@
 
 import { $ } from '../util/dom.js';
 import { escapeHtml } from '../util/format.js';
-import { state, getRole, saveState } from '../state.js';
+import { state, getRole, saveState, removeRole } from '../state.js';
 import { renderAll } from '../boot.js';
 
 export function renderRoles() {
@@ -41,10 +41,7 @@ export function renderRoles() {
     btn.addEventListener('click', () => {
       const rid = btn.dataset.rdel;
       if (!confirm('Delete this role from all templates, projects, and capacity? This cannot be undone.')) return;
-      state.roles = state.roles.filter(r => r.id !== rid);
-      delete state.capacity[rid];
-      for (const t of state.templates) for (const ph of t.phases) delete ph.loading[rid];
-      for (const p of state.projects) for (const ph of p.phases) delete ph.loading[rid];
+      removeRole(rid);
       saveState(); renderAll();
     });
   });

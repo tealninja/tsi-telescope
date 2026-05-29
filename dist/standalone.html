@@ -1250,8 +1250,8 @@
   }
 
 </style>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js" defer></script>
 </head>
 <body>
 
@@ -2139,6 +2139,44 @@ const DEFAULT_TEMPLATES = [
 ];
 
 
+/* ===== src/api/storage.js ===== */
+/* ============================================================
+   Storage seam — the ONLY module that knows how data is persisted.
+
+   Today: browser localStorage under a single JSON key.
+   Soon:  D1 via a worker /api/state endpoint, with localStorage as
+          a write-through cache and offline fallback.
+
+   The rest of the app (state.js + views + compute) calls
+   loadStateBlob() / saveStateBlob() and is agnostic to the backend.
+   ============================================================ */
+
+const STORAGE_KEY = 'tsi_resource_planner_v6';
+
+function loadStateBlob() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('loadStateBlob failed', e);
+    return null;
+  }
+}
+
+function saveStateBlob(blob) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
+  } catch (e) {
+    console.error('saveStateBlob failed', e);
+  }
+}
+
+function clearStateBlob() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+}
+
+
 /* ===== src/state.js ===== */
 /* ============================================================
    Application state — single source of truth.
@@ -2155,7 +2193,120 @@ const DEFAULT_TEMPLATES = [
 
 
 
-const STORAGE_KEY = 'tsi_resource_planner_v6';
+
+const STORAGE_KEY = STORAGE_KEY_SEAM;
+
+/* ============================================================
+   TYPES — JSDoc for now, rename to .ts during a future port.
+   These describe the shape of state.* objects so reviewers (and
+   the upcoming D1 schema) have a single source of truth.
+   ============================================================ */
+
+/**
+ * @typedef {Object} TSIRole
+ * @property {string} id
+ * @property {string} name
+ * @property {string} abbr
+ * @property {string} color
+ */
+
+/**
+ * @typedef {Object} TSIPhase
+ * @property {string} id
+ * @property {string} name
+ * @property {string} color
+ */
+
+/**
+ * @typedef {Object} TSILocation
+ * @property {string} id
+ * @property {string} name
+ * @property {number} multiplier   speed multiplier on phase durations
+ * @property {number} [lat]
+ * @property {number} [lng]
+ * @property {string} [notes]
+ */
+
+/**
+ * @typedef {Object} TSILoading      — legacy per-phase simple curve
+ * @property {number} peak           — % FTE at the flat section
+ * @property {number} rampUp         — months to ramp up
+ * @property {number} rampDown       — months to ramp down
+ */
+
+/**
+ * @typedef {Object} TSIProjectPhase
+ * @property {string} phaseId
+ * @property {number} duration       — base months (pre-location-multiplier)
+ * @property {Object<string, TSILoading>} [loading]   — legacy, kept for safety
+ */
+
+/**
+ * @typedef {Object} TSIMilestone
+ * @property {string} name
+ * @property {string} anchor         — 'start' | '_end' | phaseId
+ * @property {number} offsetMonths
+ * @property {number} percent        — for milestones
+ */
+
+/**
+ * @typedef {Object} TSICostLine
+ * @property {string} name
+ * @property {string} anchor
+ * @property {number} offsetMonths
+ * @property {number} amount         — USD outflow
+ */
+
+/**
+ * @typedef {Object} TSIProject      — same record from sales and planner POV
+ * @property {string} id
+ * @property {string} name
+ * @property {string} [client]
+ * @property {string} [location]     — free text "Spokane, WA"
+ * @property {string} [locationId]   — FK to location
+ * @property {string} templateId
+ * @property {string} startMonth     — 'YYYY-MM'
+ * @property {string} [notes]        — planner-side notes
+ * @property {TSIProjectPhase[]} phases
+ * @property {number} contractValue
+ * @property {string} billingMode    — 'milestone' | 'monthly' | 'accrual_poc'
+ * @property {TSIMilestone[]} milestones
+ * @property {TSICostLine[]} costLines
+ * @property {boolean} pinned
+ * @property {number} winProbability — 0..100
+ * @property {number} [lat]
+ * @property {number} [lng]
+ * @property {Object<string, number[]>} [detailedLoading]
+ * — CRM-lite columns (sales team owns these; live in same record)
+ * @property {string} [stage]        — 'lead'|'qualified'|'proposal'|'loi'|'awarded'|'booked'
+ * @property {string} [salesOwner]
+ * @property {string} [expectedCloseMonth]
+ * @property {string} [pipelineNotes]
+ */
+
+/**
+ * @typedef {Object} TSITemplate
+ * @property {string} id
+ * @property {string} name
+ * @property {string} [description]
+ * @property {number} [defaultContractValue]
+ * @property {string} [billingMode]
+ * @property {TSIProjectPhase[]} phases
+ * @property {TSIMilestone[]} [milestones]
+ * @property {TSICostLine[]} [costLines]
+ * @property {Object<string, number[]>} [detailedLoading]
+ */
+
+/**
+ * @typedef {Object} TSIState
+ * @property {string} startMonth
+ * @property {TSIRole[]} roles
+ * @property {TSIPhase[]} phases
+ * @property {TSITemplate[]} templates
+ * @property {TSILocation[]} locations
+ * @property {TSIProject[]} projects
+ * @property {Object<string, number[]>} capacity   — roleId -> [36 values]
+ */
 
 let state = {
   startMonth: monthKey(new Date()),
@@ -2184,15 +2335,13 @@ function getLocation(id) { return state.locations.find(l => l.id === id); }
 function getProject(id)  { return state.projects.find(p => p.id === id); }
 
 function saveState() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch (e) { console.error('Save failed', e); }
+  saveStateBlob(state);
 }
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const loaded = JSON.parse(raw);
+    const loaded = loadStateBlob();
+    if (!loaded) return false;
     state = Object.assign({
       startMonth: monthKey(new Date()),
       roles: deepCopy(DEFAULT_ROLES),
@@ -2291,6 +2440,72 @@ function seedSampleProjects() {
   state.capacity['install']   = new Array(36).fill(2);
   state.capacity['commiss']   = new Array(36).fill(2);
   state.capacity['docs']      = new Array(36).fill(1);
+}
+
+/* ============================================================
+   ACTIONS — every state mutation that views need.
+
+   View modules should call these instead of poking at state.projects,
+   state.templates, state.capacity directly. Gives us a single seam
+   where, later, we can:
+     – auto-save (debounced) after each mutation
+     – push to a D1 worker endpoint
+     – notify subscribers (for a future framework)
+     – stamp updated_at + updated_by on each touched record
+   ============================================================ */
+
+/** @param {TSIProject} p */
+function addProject(p)        { state.projects.push(p); }
+/** @param {TSIProject} p */
+function replaceProject(p) {
+  const i = state.projects.findIndex(x => x.id === p.id);
+  if (i >= 0) state.projects[i] = p;
+}
+/** @param {string} id */
+function removeProject(id) {
+  state.projects = state.projects.filter(p => p.id !== id);
+}
+
+/** @param {TSITemplate} t */
+function addTemplate(t)       { state.templates.push(t); }
+/** @param {TSITemplate} t */
+function replaceTemplate(t) {
+  const i = state.templates.findIndex(x => x.id === t.id);
+  if (i >= 0) state.templates[i] = t;
+}
+/** @param {string} id */
+function removeTemplate(id) {
+  state.templates = state.templates.filter(t => t.id !== id);
+}
+
+/** @param {TSILocation} loc */
+function addLocation(loc)     { state.locations.push(loc); }
+/** @param {string} id */
+function removeLocation(id) {
+  state.locations = state.locations.filter(l => l.id !== id);
+}
+
+/** @param {TSIRole} r */
+function addRole(r) {
+  state.roles.push(r);
+  state.capacity[r.id] = new Array(36).fill(0);
+}
+/** @param {string} id */
+function removeRole(id) {
+  state.roles = state.roles.filter(r => r.id !== id);
+  delete state.capacity[id];
+  for (const t of state.templates) for (const ph of t.phases) {
+    if (ph.loading) delete ph.loading[id];
+  }
+  for (const p of state.projects) for (const ph of p.phases) {
+    if (ph.loading) delete ph.loading[id];
+  }
+}
+
+/** @param {string} roleId @param {number} monthIdx @param {number} value */
+function setCapacity(roleId, monthIdx, value) {
+  if (!state.capacity[roleId]) state.capacity[roleId] = new Array(36).fill(0);
+  state.capacity[roleId][monthIdx] = Math.max(0, value);
 }
 
 
@@ -2550,10 +2765,7 @@ function renderRoles() {
     btn.addEventListener('click', () => {
       const rid = btn.dataset.rdel;
       if (!confirm('Delete this role from all templates, projects, and capacity? This cannot be undone.')) return;
-      state.roles = state.roles.filter(r => r.id !== rid);
-      delete state.capacity[rid];
-      for (const t of state.templates) for (const ph of t.phases) delete ph.loading[rid];
-      for (const p of state.projects) for (const ph of p.phases) delete ph.loading[rid];
+      removeRole(rid);
       saveState(); renderAll();
     });
   });
@@ -2637,7 +2849,7 @@ function renderLocations() {
       } else {
         if (!confirm(`Delete location "${loc.name}"?`)) return;
       }
-      state.locations = state.locations.filter(x => x.id !== lid);
+      removeLocation(lid);
       saveState(); renderLocations(); renderAll();
     });
   });
@@ -4096,11 +4308,8 @@ function openProjectModal(projectId) {
   $('#modal-project-save').onclick = () => {
     const out = readProjectForm(p);
     if (!out.name.trim()) { alert('Name required'); return; }
-    if (isNew) state.projects.push(out);
-    else {
-      const idx = state.projects.findIndex(x => x.id === out.id);
-      state.projects[idx] = out;
-    }
+    if (isNew) addProject(out);
+    else replaceProject(out);
     saveState();
     closeProjectModal();
     renderAll();
@@ -4780,7 +4989,7 @@ function renderProjects() {
       if (e.target.dataset.act === 'del') {
         e.stopPropagation();
         if (confirm(`Delete project "${p.name}"?`)) {
-          state.projects = state.projects.filter(x => x.id !== p.id);
+          removeProject(p.id);
           saveState(); renderAll();
         }
         return;
@@ -4908,7 +5117,7 @@ function renderTemplates() {
       const tplId = btn.dataset.tplDel;
       const t = getTemplate(tplId);
       if (!confirm(`Delete template "${t.name}"? Projects using it will keep their phase data.`)) return;
-      state.templates = state.templates.filter(x => x.id !== tplId);
+      removeTemplate(tplId);
       saveState(); renderTemplates();
     });
   });
@@ -4921,7 +5130,7 @@ function cloneTemplate(srcId) {
   const t = deepCopy(src);
   t.id = uid('tpl');
   t.name = name;
-  state.templates.push(t);
+  addTemplate(t);
   saveState();
   renderTemplates();
   toast(`Template "${name}" created`);
@@ -4943,7 +5152,7 @@ $('#btn-new-template').addEventListener('click', () => {
       loading: buildLoad({})
     }))
   };
-  state.templates.push(t);
+  addTemplate(t);
   saveState();
   renderTemplates();
   openTemplateModal(t.id);
@@ -4966,7 +5175,7 @@ $('#modal-clone-do').addEventListener('click', () => {
   const t = deepCopy(src);
   t.id = uid('tpl');
   t.name = name;
-  state.templates.push(t);
+  addTemplate(t);
   saveState();
   $('#modal-clone').classList.remove('open');
   renderTemplates();
@@ -5027,8 +5236,7 @@ function renderTemplateModalBody(t) {
   $('#modal-template-save').onclick = () => {
     t.name = $('#tf-name').value;
     t.description = $('#tf-description').value;
-    const idx = state.templates.findIndex(x => x.id === t.id);
-    state.templates[idx] = t;
+    replaceTemplate(t);
     saveState();
     closeTemplateModal();
     renderTemplates();
@@ -7423,6 +7631,7 @@ function card(label, value, sub, cls) {
 
 
 
+
 /* ============================================================
    UI WIRING
    ============================================================ */
@@ -7507,7 +7716,7 @@ $('#file-import').addEventListener('change', (e) => {
 
 $('#btn-reset').addEventListener('click', () => {
   if (!confirm('Reset to TSI defaults? All projects and capacity entries will be cleared.')) return;
-  localStorage.removeItem(STORAGE_KEY);
+  clearStateBlob();
   setState({
     startMonth: monthKey(new Date()),
     roles: deepCopy(DEFAULT_ROLES),
@@ -7554,7 +7763,7 @@ $('#btn-new-location').addEventListener('click', () => {
   if (!name) return;
   const mult = parseFloat(prompt('Speed multiplier (1.0 = baseline; 0.7 = 30% faster; 1.2 = 20% slower)?', '1.0'));
   if (!mult || mult <= 0) return;
-  state.locations.push({ id: uid('loc'), name, multiplier: mult, notes: '' });
+  addLocation({ id: uid('loc'), name, multiplier: mult, notes: '' });
   saveState(); renderLocations();
 });
 
@@ -7562,11 +7771,7 @@ $('#btn-new-location').addEventListener('click', () => {
 $('#btn-new-role').addEventListener('click', () => {
   const name = prompt('Role name?');
   if (!name) return;
-  const r = { id: uid('role'), name, abbr: name.slice(0,3).toUpperCase(), color: '#888888' };
-  state.roles.push(r);
-  state.capacity[r.id] = new Array(36).fill(0);
-  for (const t of state.templates) for (const ph of t.phases) ph.loading[r.id] = defaultLoading(0,0,0);
-  for (const p of state.projects) for (const ph of p.phases) ph.loading[r.id] = defaultLoading(0,0,0);
+  addRole({ id: uid('role'), name, abbr: name.slice(0,3).toUpperCase(), color: '#888888' });
   saveState(); renderRoles();
 });
 

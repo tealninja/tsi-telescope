@@ -8,14 +8,15 @@ import { $, $$, toast } from './util/dom.js';
 import { deepCopy, deepCopyMilestones, uid } from './util/clone.js';
 import {
   DEFAULT_ROLES, DEFAULT_PHASES, DEFAULT_LOCATIONS, DEFAULT_TEMPLATES,
-  DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED,
-  defaultLoading
+  DEFAULT_MILESTONE_SCHED, DEFAULT_COST_SCHED
 } from './defaults.js';
 import {
-  state, setState, STORAGE_KEY,
+  state, setState,
   getTemplate,
-  saveState, loadState, seedSampleProjects
+  saveState, loadState, seedSampleProjects,
+  addLocation, addRole
 } from './state.js';
+import { clearStateBlob } from './api/storage.js';
 import { migrateAllToDetailed } from './compute/demand.js';
 import { renderRoles } from './ui/roles-view.js';
 import { renderLocations } from './ui/locations-view.js';
@@ -114,7 +115,7 @@ $('#file-import').addEventListener('change', (e) => {
 
 $('#btn-reset').addEventListener('click', () => {
   if (!confirm('Reset to TSI defaults? All projects and capacity entries will be cleared.')) return;
-  localStorage.removeItem(STORAGE_KEY);
+  clearStateBlob();
   setState({
     startMonth: monthKey(new Date()),
     roles: deepCopy(DEFAULT_ROLES),
@@ -161,7 +162,7 @@ $('#btn-new-location').addEventListener('click', () => {
   if (!name) return;
   const mult = parseFloat(prompt('Speed multiplier (1.0 = baseline; 0.7 = 30% faster; 1.2 = 20% slower)?', '1.0'));
   if (!mult || mult <= 0) return;
-  state.locations.push({ id: uid('loc'), name, multiplier: mult, notes: '' });
+  addLocation({ id: uid('loc'), name, multiplier: mult, notes: '' });
   saveState(); renderLocations();
 });
 
@@ -169,11 +170,7 @@ $('#btn-new-location').addEventListener('click', () => {
 $('#btn-new-role').addEventListener('click', () => {
   const name = prompt('Role name?');
   if (!name) return;
-  const r = { id: uid('role'), name, abbr: name.slice(0,3).toUpperCase(), color: '#888888' };
-  state.roles.push(r);
-  state.capacity[r.id] = new Array(36).fill(0);
-  for (const t of state.templates) for (const ph of t.phases) ph.loading[r.id] = defaultLoading(0,0,0);
-  for (const p of state.projects) for (const ph of p.phases) ph.loading[r.id] = defaultLoading(0,0,0);
+  addRole({ id: uid('role'), name, abbr: name.slice(0,3).toUpperCase(), color: '#888888' });
   saveState(); renderRoles();
 });
 

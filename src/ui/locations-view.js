@@ -5,7 +5,7 @@
 
 import { $ } from '../util/dom.js';
 import { escapeHtml } from '../util/format.js';
-import { state, getLocation, saveState } from '../state.js';
+import { state, getLocation, saveState, removeLocation } from '../state.js';
 import { renderAll } from '../boot.js';
 
 export function renderLocations() {
@@ -76,7 +76,7 @@ export function renderLocations() {
       } else {
         if (!confirm(`Delete location "${loc.name}"?`)) return;
       }
-      state.locations = state.locations.filter(x => x.id !== lid);
+      removeLocation(lid);
       saveState(); renderLocations(); renderAll();
     });
   });

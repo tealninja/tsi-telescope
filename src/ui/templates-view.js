@@ -7,7 +7,7 @@
 import { $, $$, toast } from '../util/dom.js';
 import { escapeHtml } from '../util/format.js';
 import { deepCopy, uid } from '../util/clone.js';
-import { state, getPhase, getTemplate, saveState } from '../state.js';
+import { state, getPhase, getTemplate, saveState, addTemplate, replaceTemplate, removeTemplate } from '../state.js';
 import { buildLoad, defaultLoading } from '../defaults.js';
 import {
   buildDetailedScheduleSection, wireDetailedSchedule,
@@ -53,7 +53,7 @@ export function renderTemplates() {
       const tplId = btn.dataset.tplDel;
       const t = getTemplate(tplId);
       if (!confirm(`Delete template "${t.name}"? Projects using it will keep their phase data.`)) return;
-      state.templates = state.templates.filter(x => x.id !== tplId);
+      removeTemplate(tplId);
       saveState(); renderTemplates();
     });
   });
@@ -66,7 +66,7 @@ function cloneTemplate(srcId) {
   const t = deepCopy(src);
   t.id = uid('tpl');
   t.name = name;
-  state.templates.push(t);
+  addTemplate(t);
   saveState();
   renderTemplates();
   toast(`Template "${name}" created`);
@@ -88,7 +88,7 @@ $('#btn-new-template').addEventListener('click', () => {
       loading: buildLoad({})
     }))
   };
-  state.templates.push(t);
+  addTemplate(t);
   saveState();
   renderTemplates();
   openTemplateModal(t.id);
@@ -111,7 +111,7 @@ $('#modal-clone-do').addEventListener('click', () => {
   const t = deepCopy(src);
   t.id = uid('tpl');
   t.name = name;
-  state.templates.push(t);
+  addTemplate(t);
   saveState();
   $('#modal-clone').classList.remove('open');
   renderTemplates();
@@ -172,8 +172,7 @@ function renderTemplateModalBody(t) {
   $('#modal-template-save').onclick = () => {
     t.name = $('#tf-name').value;
     t.description = $('#tf-description').value;
-    const idx = state.templates.findIndex(x => x.id === t.id);
-    state.templates[idx] = t;
+    replaceTemplate(t);
     saveState();
     closeTemplateModal();
     renderTemplates();
