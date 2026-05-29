@@ -1071,6 +1071,109 @@
     font-family: var(--font-mono);
   }
 
+  /* ================================================================
+     MOBILE LAYER 1  —  pure CSS responsiveness, no JS changes.
+     Two breakpoints: 800px (tablet-portrait) and 540px (phone).
+     ================================================================ */
+
+  /* Tabs scroll horizontally when they overflow the viewport. */
+  .tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;            /* Firefox */
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex-shrink: 0; }
+
+  /* The project-editor tab strip — same treatment so it scrolls inside
+     the modal on narrow widths instead of wrapping. */
+  .modal-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+  .modal-tabs::-webkit-scrollbar { display: none; }
+  .modal-tab { flex-shrink: 0; }
+
+  /* Tablet-and-down: tighten panel padding and full-screen the modal. */
+  @media (max-width: 800px) {
+    main { padding: 16px 14px 80px; }
+    header.masthead { padding: 12px 16px; gap: 14px; }
+    .masthead-icon { width: 36px; height: 36px; }
+    .masthead-title { font-size: 22px; }
+    .masthead-sub { display: none; }
+    .masthead-actions .btn { padding: 6px 10px; font-size: 11px; }
+
+    .tabs { padding: 0 14px; top: 60px; }
+    .tab { padding: 12px 14px; font-size: 11px; }
+
+    .panel-header { padding: 14px 16px; gap: 10px; flex-wrap: wrap; }
+    .panel-body { padding: 14px 16px; }
+    .panel-body.flush { padding: 0; }
+    .panel-title { font-size: 15px; }
+
+    /* Modals become near-fullscreen sheets. */
+    .modal-overlay { padding: 0; }
+    .modal {
+      max-width: none;
+      max-height: 100vh;
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+    }
+    .modal-header { padding: 12px 16px; border-radius: 0; }
+    .modal-header .panel-title { font-size: 15px; }
+    .modal-body { padding: 14px 16px; }
+    .modal-footer { padding: 12px 16px; border-radius: 0; }
+
+    .modal-tabs { margin: 0 0 14px 0; gap: 0; }
+    .modal-tab { padding: 10px 14px; letter-spacing: 0.08em; }
+
+    /* Two-up rather than four-up on the dashboard. */
+    .dash-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .dash-card { padding: 14px 16px; min-height: 100px; }
+    .dash-card .dash-value { font-size: 24px; }
+
+    /* Form rows go vertical instead of horizontal on narrow widths. */
+    .field-row { flex-wrap: wrap; gap: 12px; }
+    .field-row > .field { flex: 1 1 100%; min-width: 0; }
+
+    /* KPI row + project grid: more breathable single-column stack. */
+    .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .project-grid { grid-template-columns: 1fr; gap: 10px; }
+
+    /* Risk-list rows go from 4-column grid to stacked cards. */
+    .dash-risk-row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+      padding: 12px 14px;
+    }
+
+    /* Bigger touch targets on tiny buttons. */
+    .btn.small { padding: 8px 12px; font-size: 11px; min-height: 34px; }
+
+    /* Map a little shorter on phones so it doesn't dominate. */
+    .map-wrap { height: 320px; }
+    .mini-map-wrap { height: 180px; }
+  }
+
+  /* Phone: single-column dashboard cards and tighter type. */
+  @media (max-width: 540px) {
+    .dash-grid { grid-template-columns: 1fr; }
+    .kpi-row { grid-template-columns: 1fr; }
+    .panel-title { font-size: 14px; }
+    .eyebrow { font-size: 9px; letter-spacing: 0.1em; }
+
+    /* The masthead-actions buttons share a row with the title — shrink
+       further or wrap to the next line when title is verbose. */
+    header.masthead { flex-wrap: wrap; }
+    .masthead-actions { flex-wrap: wrap; gap: 4px; }
+    .masthead-actions .btn { padding: 5px 8px; font-size: 10px; }
+  }
+
 </style>
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
