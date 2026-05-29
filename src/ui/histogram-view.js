@@ -22,6 +22,17 @@ let histMode = 'role';   // 'role' | 'project-bar' | 'project-area'
 let histShowCap = true;
 let _histRange = { sIdx: 0, eIdx: 35 };
 
+/* Compute a column width that makes the chart exactly fill its wrap
+   element. We previously sized to a fixed 900px target, which caused
+   horizontal overflow once the visible range covered all 36 months on
+   anything but a wide desktop. Floor to integer pixels for crisp bars;
+   tiny floor below 4 just to keep things visible on a phone. */
+function fitColW(wrapEl, visN, labelW = 70, padRight = 24) {
+  const ww = (wrapEl && wrapEl.clientWidth) || 800;
+  const inner = Math.max(120, ww - labelW - padRight);
+  return Math.max(4, Math.floor(inner / Math.max(1, visN)));
+}
+
 
 export function renderHistogram() {
   // Update title and legend depending on mode
@@ -44,7 +55,7 @@ function renderHistogramByRole() {
   const horizon = horizonMonths();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 56;
   const chartH = 320;
@@ -184,7 +195,7 @@ function renderHistogramByProjectBars() {
   const horizon = horizonMonths();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 56;
   const chartH = 320;
@@ -323,7 +334,7 @@ function renderHistogramByProjectArea() {
   const horizon = horizonMonths();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 56;
   const chartH = 320;
@@ -549,7 +560,7 @@ function renderBottleneckStrip() {
   const { ratios, drivers } = computeBottleneckSeries();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 28;
   const chartH = 64;

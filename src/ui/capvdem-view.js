@@ -34,8 +34,10 @@ function drawCVD() {
 
   const wrap = $('#cvd-wrap');
   const N = 36;
-  const colW = 34;
   const labelW = 70;
+  const padRight = 24;
+  const ww = (wrap && wrap.clientWidth) || 800;
+  const colW = Math.max(4, Math.floor(Math.max(120, ww - labelW - padRight) / N));
   const padTop = 64;
   const chartH = 280;
   const padBottom = 50;

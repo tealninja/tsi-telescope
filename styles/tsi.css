@@ -1172,47 +1172,6 @@
      localStorage per table.
      ================================================================ */
 
-  .capacity-table-wrap.fit-width { overflow-x: hidden; }
-  .capacity-table-wrap.fit-width .capacity-table {
-    table-layout: fixed;
-    width: 100%;
-    min-width: 0;
-  }
-  .capacity-table-wrap.fit-width .capacity-table th,
-  .capacity-table-wrap.fit-width .capacity-table td {
-    padding: 2px 0;
-    font-size: 10px;
-    overflow: hidden;
-  }
-  .capacity-table-wrap.fit-width .capacity-table th.role-head {
-    min-width: 0;
-    width: 56px;
-  }
-  .capacity-table-wrap.fit-width .capacity-table .role-name {
-    position: static;
-    padding: 4px 6px;
-    font-size: 10px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-  }
-  .capacity-table-wrap.fit-width .capacity-table input {
-    width: 100%;
-    min-width: 0;
-    padding: 2px 1px;
-    font-size: 10px;
-    border: 0;
-    background: transparent;
-    text-align: center;
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-    -moz-appearance: textfield;
-  }
-  .capacity-table-wrap.fit-width .capacity-table input::-webkit-outer-spin-button,
-  .capacity-table-wrap.fit-width .capacity-table input::-webkit-inner-spin-button {
-    -webkit-appearance: none; margin: 0;
-  }
-
   .ds-table-wrap.fit-width { overflow-x: hidden; }
   .ds-table-wrap.fit-width .ds-table {
     table-layout: fixed;

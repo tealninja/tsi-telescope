@@ -1182,47 +1182,6 @@
      localStorage per table.
      ================================================================ */
 
-  .capacity-table-wrap.fit-width { overflow-x: hidden; }
-  .capacity-table-wrap.fit-width .capacity-table {
-    table-layout: fixed;
-    width: 100%;
-    min-width: 0;
-  }
-  .capacity-table-wrap.fit-width .capacity-table th,
-  .capacity-table-wrap.fit-width .capacity-table td {
-    padding: 2px 0;
-    font-size: 10px;
-    overflow: hidden;
-  }
-  .capacity-table-wrap.fit-width .capacity-table th.role-head {
-    min-width: 0;
-    width: 56px;
-  }
-  .capacity-table-wrap.fit-width .capacity-table .role-name {
-    position: static;
-    padding: 4px 6px;
-    font-size: 10px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-  }
-  .capacity-table-wrap.fit-width .capacity-table input {
-    width: 100%;
-    min-width: 0;
-    padding: 2px 1px;
-    font-size: 10px;
-    border: 0;
-    background: transparent;
-    text-align: center;
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-    -moz-appearance: textfield;
-  }
-  .capacity-table-wrap.fit-width .capacity-table input::-webkit-outer-spin-button,
-  .capacity-table-wrap.fit-width .capacity-table input::-webkit-inner-spin-button {
-    -webkit-appearance: none; margin: 0;
-  }
-
   .ds-table-wrap.fit-width { overflow-x: hidden; }
   .ds-table-wrap.fit-width .ds-table {
     table-layout: fixed;
@@ -1434,7 +1393,6 @@
           <div class="panel-title">Monthly Role Capacity · Headcount</div>
         </div>
         <div>
-          <button class="btn ghost small" id="btn-cap-fit" title="Toggle compress-to-page-width layout">⇆ Fit Width</button>
           <button class="btn ghost small" id="btn-cap-fill">Fill Right →</button>
           <button class="btn ghost small" id="btn-cap-zero">Zero All</button>
         </div>
@@ -2697,33 +2655,6 @@ function renderLocations() {
 
 
 
-const FIT_KEY = 'tsi_cap_fit_width_v1';
-
-function capFitWidthDefault() {
-  // Default: ON for narrow viewports, OFF on desktop.
-  if (typeof window !== 'undefined' && window.innerWidth && window.innerWidth <= 800) return true;
-  return false;
-}
-
-function capFitWidth() {
-  try {
-    const v = localStorage.getItem(FIT_KEY);
-    if (v === '1') return true;
-    if (v === '0') return false;
-  } catch (_) {}
-  return capFitWidthDefault();
-}
-
-function setCapFitWidth(on) {
-  try { localStorage.setItem(FIT_KEY, on ? '1' : '0'); } catch (_) {}
-  applyCapFitWidthClass();
-}
-
-function applyCapFitWidthClass() {
-  const wrap = $('.capacity-table-wrap');
-  if (wrap) wrap.classList.toggle('fit-width', capFitWidth());
-}
-
 function renderCapacity() {
   const table = $('#capacity-table');
   const horizon = horizonMonths();
@@ -2783,8 +2714,6 @@ function renderCapacity() {
       saveState();
     });
   });
-
-  applyCapFitWidthClass();
 }
 
 
@@ -5249,8 +5178,10 @@ function drawCVD() {
 
   const wrap = $('#cvd-wrap');
   const N = 36;
-  const colW = 34;
   const labelW = 70;
+  const padRight = 24;
+  const ww = (wrap && wrap.clientWidth) || 800;
+  const colW = Math.max(4, Math.floor(Math.max(120, ww - labelW - padRight) / N));
   const padTop = 64;
   const chartH = 280;
   const padBottom = 50;
@@ -5484,6 +5415,17 @@ let histMode = 'role';   // 'role' | 'project-bar' | 'project-area'
 let histShowCap = true;
 let _histRange = { sIdx: 0, eIdx: 35 };
 
+/* Compute a column width that makes the chart exactly fill its wrap
+   element. We previously sized to a fixed 900px target, which caused
+   horizontal overflow once the visible range covered all 36 months on
+   anything but a wide desktop. Floor to integer pixels for crisp bars;
+   tiny floor below 4 just to keep things visible on a phone. */
+function fitColW(wrapEl, visN, labelW = 70, padRight = 24) {
+  const ww = (wrapEl && wrapEl.clientWidth) || 800;
+  const inner = Math.max(120, ww - labelW - padRight);
+  return Math.max(4, Math.floor(inner / Math.max(1, visN)));
+}
+
 
 function renderHistogram() {
   // Update title and legend depending on mode
@@ -5506,7 +5448,7 @@ function renderHistogramByRole() {
   const horizon = horizonMonths();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 56;
   const chartH = 320;
@@ -5646,7 +5588,7 @@ function renderHistogramByProjectBars() {
   const horizon = horizonMonths();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 56;
   const chartH = 320;
@@ -5785,7 +5727,7 @@ function renderHistogramByProjectArea() {
   const horizon = horizonMonths();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 56;
   const chartH = 320;
@@ -6011,7 +5953,7 @@ function renderBottleneckStrip() {
   const { ratios, drivers } = computeBottleneckSeries();
   const sIdx = _histRange.sIdx, eIdx = _histRange.eIdx;
   const visN = eIdx - sIdx + 1;
-  const colW = Math.max(22, Math.min(60, Math.floor(900 / visN)));
+  const colW = fitColW(wrap, visN);
   const labelW = 70;
   const padTop = 28;
   const chartH = 64;
@@ -7585,10 +7527,6 @@ $('#btn-reset').addEventListener('click', () => {
 $('#btn-new-project').addEventListener('click', () => openProjectModal(null));
 
 /* ---------- Capacity view top-level buttons ---------- */
-$('#btn-cap-fit').addEventListener('click', () => {
-  setCapFitWidth(!capFitWidth());
-});
-
 $('#btn-cap-fill').addEventListener('click', () => {
   for (const r of state.roles) {
     const arr = state.capacity[r.id] || new Array(36).fill(0);
