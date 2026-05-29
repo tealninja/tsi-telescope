@@ -1,5 +1,5 @@
 /* ============================================================
-   Map view  ·  natural-earth projection of the project portfolio.
+   Map view  ·  web-mercator projection of the project portfolio.
 
    Two render entry points:
      renderMap(container)       — full map for the Dashboard panel
@@ -88,7 +88,9 @@ function draw(wrap, topo, opts) {
     return;
   }
 
-  const projection = d3.geoNaturalEarth1().fitSize([w, h], { type: 'Sphere' });
+  // Web Mercator. d3 clips internally at ~±85° latitude so the projection
+  // stays finite; fitSize on a Sphere gives a world-fitting initial frame.
+  const projection = d3.geoMercator().fitSize([w, h], { type: 'Sphere' });
   const path = d3.geoPath(projection);
   const land = topojson.feature(topo, topo.objects.countries);
 
