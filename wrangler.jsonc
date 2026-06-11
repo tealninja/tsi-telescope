@@ -1,11 +1,20 @@
 {
   "$schema": "https://unpkg.com/wrangler@latest/config-schema.json",
   "name": "tsi-telescope",
+  "main": "worker.js",
   "compatibility_date": "2025-10-01",
   "assets": {
     "directory": "./",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Only /api/* hits the Worker; everything else is served straight
+    // from static assets (with SPA fallback). Without this, the SPA
+    // not-found handler would swallow /api/state before the Worker runs.
+    "run_worker_first": ["/api/*"]
   },
+  "kv_namespaces": [
+    { "binding": "STATE_KV", "id": "84f262bbfc04414f9da37ba437a7afa1" }
+  ],
   "observability": {
     "enabled": true
   }

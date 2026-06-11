@@ -16,7 +16,9 @@ import {
   saveState, loadState, seedSampleProjects,
   addLocation, addRole
 } from './state.js';
-import { clearStateBlob } from './api/storage.js';
+import {
+  clearStateBlob, fetchRemoteBlob, flushToRemote, lastUpdatedAt, markAdopted
+} from './api/storage.js';
 import { stageForWinProb } from './util/stages.js';
 import { migrateAllToDetailed } from './compute/demand.js';
 import { renderRoles } from './ui/roles-view.js';
@@ -200,24 +202,85 @@ export function renderAll() {
 }
 
 /* ============================================================
+   SHARED-STATE SYNC
+
+   The plan lives in Cloudflare KV behind /api/state; localStorage is a
+   write-through cache. Boot paints from the local cache instantly, then
+   reconciles with the shared copy. A poll loop keeps peers roughly live.
+   Concurrency is last-write-wins, ordered by the blob's updatedAt stamp.
+   ============================================================ */
+
+const POLL_INTERVAL_MS = 8000;
+
+/* True while the user is mid-edit, so the poll loop never yanks the
+   ground out from under them. Covers open modals and focused inputs. */
+function isEditing() {
+  if (document.querySelector('.modal-overlay.open')) return true;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ||
+             el.tagName === 'SELECT' || el.isContentEditable)) return true;
+  return false;
+}
+
+/* Replace in-memory state with a blob from the server, running it through
+   the same backfill/migration as a local load. Does NOT save — the server
+   copy is already canonical, and re-saving would echo back as a new write. */
+function adoptRemote(blob) {
+  loadState(blob);
+  migrateAllToDetailed();
+  markAdopted(blob);
+  renderAll();
+}
+
+/* One-shot reconcile with the server. */
+async function syncFromRemote() {
+  const remote = await fetchRemoteBlob();
+  const remoteAt = (remote && remote.updatedAt) || 0;
+  if (!remote) {
+    saveState();                 // server empty → seed it from our copy
+  } else if (remoteAt > lastUpdatedAt()) {
+    adoptRemote(remote);         // shared copy is newer → take it
+  } else if (lastUpdatedAt() > remoteAt) {
+    saveState();                 // our copy is newer → push it up
+  }                              // else: already in sync
+}
+
+async function pollSync() {
+  if (isEditing()) return;       // don't clobber an in-progress edit
+  const remote = await fetchRemoteBlob();
+  if (remote && (remote.updatedAt || 0) > lastUpdatedAt()) adoptRemote(remote);
+}
+
+/* ============================================================
    BOOT
    ============================================================ */
 
 if (!loadState()) {
   seedSampleProjects();
-  saveState();
 } else {
   for (const r of state.roles) {
     if (!state.capacity[r.id]) state.capacity[r.id] = new Array(36).fill(0);
   }
+  // Seed the sync watermark from the local copy's stamp so syncFromRemote
+  // can tell whether the server is genuinely ahead of us.
+  markAdopted(state);
 }
 // Convert any legacy per-phase peak/rampUp/rampDown curves into the
 // detailed monthly grid so the rest of the app has a single source of truth.
 migrateAllToDetailed();
-saveState();
 renderAll();
 
-window.addEventListener('beforeunload', saveState);
+// Reconcile with the shared copy (adopt if newer, seed/push if not), then
+// start polling for peers' changes. Deliberately after first paint so the
+// UI never blocks on the network.
+syncFromRemote().finally(() => {
+  setInterval(pollSync, POLL_INTERVAL_MS);
+});
+
+window.addEventListener('beforeunload', () => {
+  saveState();      // stamp + cache locally and queue the push
+  flushToRemote();  // send it now (keepalive) — the timer won't fire on unload
+});
 
 // Re-render charts on window resize (rotate / browser-window change) so
 // the responsive colW math picks up the new wrap width. Debounced so it

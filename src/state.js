@@ -164,9 +164,11 @@ export function saveState() {
   saveStateBlob(state);
 }
 
-export function loadState() {
+export function loadState(blob) {
   try {
-    const loaded = loadStateBlob();
+    // Adopt the passed blob (e.g. the shared copy from the server) when
+    // given; otherwise fall back to the synchronous local cache.
+    const loaded = blob !== undefined ? blob : loadStateBlob();
     if (!loaded) return false;
     state = Object.assign({
       startMonth: monthKey(new Date()),

@@ -48,8 +48,8 @@ function collectModules(entry) {
 function stripModuleSyntax(src) {
   // Remove `import ... from '...';` (single or multi-line).
   src = src.replace(/^\s*import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+['"][^'"]+['"];?\s*$/gm, '');
-  // Replace `export function/const/let/var X` with the bare declaration.
-  src = src.replace(/^export\s+(function|const|let|var|class)\b/gm, '$1');
+  // Replace `export [async] function/const/let/var/class X` with the bare declaration.
+  src = src.replace(/^export\s+(async\s+function|function|const|let|var|class)\b/gm, '$1');
   // Replace `export { ... };` lines (none in this codebase, but cheap insurance).
   src = src.replace(/^\s*export\s*\{[^}]*\};?\s*$/gm, '');
   return src;
